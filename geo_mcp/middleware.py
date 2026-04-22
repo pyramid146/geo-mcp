@@ -30,10 +30,11 @@ log = logging.getLogger("geo_mcp.middleware")
 current_auth: ContextVar[AuthContext | None] = ContextVar("current_auth", default=None)
 
 
-# Paths that bypass API-key auth. Only GET endpoints that reveal no
-# per-customer or operational secrets belong here — /health is the
-# canonical example (just reports service liveness + table presence).
-_PUBLIC_PATHS: frozenset[str] = frozenset({"/health"})
+# Paths that bypass API-key auth. Only endpoints that reveal no
+# per-customer or operational secrets belong here: /health (liveness
+# probe), the root landing page, and the self-service signup + verify
+# endpoints — those *are* what mints a key, so can't require one.
+_PUBLIC_PATHS: frozenset[str] = frozenset({"/", "/health", "/signup", "/signup/verify"})
 
 
 class AuthMiddleware(BaseHTTPMiddleware):

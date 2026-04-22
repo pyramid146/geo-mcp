@@ -6,23 +6,24 @@ Built for the property-risk vertical — conveyancing, insurance, proptech — b
 
 ---
 
-## What it does
+## Get started
 
-```
-┌───────────────────────────┐   ┌─────────────────────────────────┐
-│  LLM agent                │   │  geo-mcp                        │
-│  (Claude Desktop, Code,   │──►│  fastmcp over streamable HTTP   │
-│   CustomGPT, etc.)        │   │  API-key auth + usage logging   │
-└───────────────────────────┘   └────────────┬────────────────────┘
-                                             │
-                           ┌─────────────────┼────────────────┐
-                           ▼                 ▼                ▼
-                     PostGIS 16+3.4    OS Terrain 50     Upstream APIs
-                     (ONSPD, NHLE,     COG (elevation)   (BGS GeoIndex,
-                      HMLR PPD, EPC,                      EA RoFSW WMS)
-                      EA flood, BGS,
-                      OpenNames, …)
-```
+1. Visit **`https://<hosted-instance>/signup`** and enter your email.
+2. Click the confirmation link — your API key is displayed once.
+3. Paste it into your MCP client config. Example for Claude Code at `~/.claude/mcp_servers.json`:
+   ```json
+   {
+     "geo-mcp": {
+       "type": "http",
+       "url": "https://<hosted-instance>/mcp",
+       "headers": { "Authorization": "Bearer gmcp_live_..." }
+     }
+   }
+   ```
+
+Free tier. Rate-limited but no credit card required.
+
+---
 
 ## Tools
 
@@ -68,136 +69,76 @@ Every response includes the licence attribution for the data it used. Coverage a
 
 ## Data & licences
 
-All datasets used in the default build are **Open Government Licence v3.0** (OGLv3) — commercial reuse is fine with attribution. The tool responses include attribution strings you can surface in your UI.
+All datasets used in the default build are **Open Government Licence v3.0** — commercial reuse is fine with attribution.
 
-| Source | Dataset | Licence |
-|---|---|---|
-| ONS | ONSPD (postcodes) | OGLv3 |
-| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50 | OGLv3 |
-| Environment Agency | Flood Zones, RoFRS, RoFSW (WMS), Recorded Flood Outlines | OGLv3 |
-| Historic England | National Heritage List | OGLv3 |
-| British Geological Survey | Geology 625k, GeoIndex boreholes | OGLv3 |
-| HM Land Registry | Price Paid Data | OGLv3 |
-| MHCLG | EPC Register | OGLv3 |
+| Source | Dataset |
+|---|---|
+| ONS | ONSPD (postcodes) |
+| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50 |
+| Environment Agency | Flood Zones, RoFRS, RoFSW (WMS), Recorded Flood Outlines |
+| Historic England | National Heritage List |
+| British Geological Survey | Geology 625k, GeoIndex boreholes |
+| HM Land Registry | Price Paid Data |
+| MHCLG | EPC Register |
 
 The server itself is MIT-licensed — see [LICENSE](./LICENSE).
 
 ---
 
-## Usage
+## Design notes
 
-### Hosted (easiest)
-
-A hosted instance is available for evaluation. Email **cairo.pyramids@protonmail.com** for an API key.
-
-Add to `~/.claude/mcp_servers.json` (Claude Code) or equivalent:
-
-```json
-{
-  "geo-mcp": {
-    "type": "http",
-    "url": "https://geo-mcp.<host>/mcp",
-    "headers": { "Authorization": "Bearer gmcp_live_..." }
-  }
-}
-```
-
-### Self-host
-
-Bring-your-own data. See [Self-hosting](#self-hosting) below — non-trivial (multi-GB datasets, some with OAuth hoops).
-
----
-
-## Self-hosting
-
-**Prerequisites**
-- Docker + docker-compose
-- ~60 GB free disk (PostGIS + ingested data)
-- Python 3.12
-- `gdal-bin` (`ogr2ogr`, `gdal_translate`) for the ingest scripts
-- `postgresql-client-16` for admin CLI convenience
-
-**1. Clone + env**
-```bash
-git clone https://github.com/<you>/geo-mcp.git
-cd geo-mcp
-cp .env.example .env
-# Fill in passwords in .env (never commit)
-```
-
-**2. PostGIS**
-```bash
-docker compose up -d postgis
-./scripts/migrate.sh           # applies migrations/*.sql as mcp_admin
-```
-
-**3. Load data**
-
-Each dataset has an idempotent `download.sh` + `load.sh` pair in `ingest/<name>/`. Load only the ones your tools need — there's no hard dependency between datasets.
-
-```bash
-./ingest/onspd/download.sh && ./ingest/onspd/load.sh
-./ingest/boundary_line/download.sh && ./ingest/boundary_line/load.sh
-# …and so on per-dataset
-```
-
-EPC requires a GOV.UK One Login OAuth flow — the bulk CSVs get dropped into `data-hand-off/` and `ingest/epc/` takes over from there. See `ingest/epc/README.md`.
-
-**4. Install & run**
-```bash
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e .
-python -m geo_mcp.admin mint-key --email you@example.com --label dev
-# Save the key that's printed — the server only stores its hash.
-python -m geo_mcp
-```
-
-Hits `http://127.0.0.1:8000/mcp`. Liveness probe at `GET /health` bypasses auth.
-
-**5. Optional: nightly backup drill**
-
-`scripts/systemd/geo-mcp-backup.{service,timer}` back up the `meta` schema (customers, keys, usage log) to `/data/backups` daily. `scripts/restore-drill.sh` restores the latest into a scratch DB and asserts row counts. Adjust paths / user for your host.
-
----
-
-## Config
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `POSTGRES_DB` | required | Postgres database name |
-| `DB_HOST` | `127.0.0.1` | Postgres host |
-| `DB_PORT` | `5432` | Postgres port |
-| `DB_USER` | `mcp_readonly` | Role tools query as — use the readonly role. |
-| `MCP_READONLY_PASSWORD` | required | Readonly-role password |
-| `MCP_HTTP_HOST` | `127.0.0.1` | Bind host. Set to `0.0.0.0` to accept Tailscale / Cloudflare Tunnel. |
-| `MCP_HTTP_PORT` | `8000` | Bind port |
-
-Ingest and migration scripts additionally need `MCP_ADMIN_PASSWORD` and `MCP_INGEST_PASSWORD` — see `.env.example`.
+- **Decisions, not data.** "Flood Zone 3, rivers" beats a 500-row polygon dump. If the caller has to post-process the response, the tool is designed wrong.
+- **Docstrings are product copy.** They're what the LLM reads to decide whether to call the tool.
+- **Errors come back as `{"error": ..., "message": ...}`**, never raised to the client.
+- **Auth is in-process.** `AuthMiddleware` is authoritative for API-key validation. Transport layers (Cloudflare, reverse proxy) are TLS/DDoS only.
+- **Every response carries its attribution.** OGLv3 data must be credited; the tools do it automatically.
 
 ---
 
 ## Development
 
+Running locally is supported but non-trivial — the tools need ~60 GB of pre-ingested UK open data to work. The hosted instance exists precisely so you don't have to do this.
+
+**Prerequisites:** Docker + docker-compose, Python 3.12, `gdal-bin`, `postgresql-client-16`, ~60 GB free disk.
+
 ```bash
+git clone <repo> && cd geo-mcp
+cp .env.example .env     # fill in passwords
+docker compose up -d postgis
+./scripts/migrate.sh
+
+# Load the datasets you need — each has download.sh + load.sh in ingest/<name>/
+./ingest/onspd/download.sh && ./ingest/onspd/load.sh
+# …etc
+
+python3.12 -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
-pytest -q           # full suite, ~50 s, needs local PostGIS
-ruff check .
+pytest -q               # ~50 s, integrates against real PostGIS
+python -m geo_mcp       # serves on 127.0.0.1:8000
 ```
 
-Most tests integrate against the running PostGIS container rather than mocking — mocks drift from the real schema, and the cost of running Postgres in Docker is trivial.
+Hit `GET /health` for liveness + readiness (no auth). `GET /` for the landing page, `GET /signup` to mint yourself a key without going through the admin CLI.
 
-### Architecture principles
+### Environment
 
-- **Tools return decisions, not data.** "Flood Zone 3, rivers" beats a 500-row polygon dump. An agent that has to post-process the response means the tool was designed wrong.
-- **Docstrings are product copy.** They're what the LLM reads to decide whether to call the tool. Invest accordingly.
-- **Errors come back as `{"error": ..., "message": ...}`**, never raised to the client.
-- **Auth is in-process.** `AuthMiddleware` is authoritative for API-key validation. Any transport layer (Cloudflare, reverse proxy) is TLS/DDoS only — never shift auth to the edge.
-- **Every response carries its attribution.** OGLv3 data must be credited; the tools do it automatically so your UI can surface it.
+| Env var | Default | Purpose |
+|---|---|---|
+| `POSTGRES_DB` | required | Postgres database name |
+| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `5432` | Postgres address |
+| `DB_USER` / `MCP_READONLY_PASSWORD` | `mcp_readonly` / required | App role (readonly on geospatial data, read/write on `meta`) |
+| `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | `127.0.0.1` / `8000` | Bind address |
+| `GEO_MCP_PUBLIC_BASE_URL` | `http://127.0.0.1:8000` | Base URL used in signup emails |
+| `GEO_MCP_FROM_EMAIL` | `onboarding@resend.dev` | `From:` address on signup emails |
+| `RESEND_API_KEY` | unset | Resend API key — if unset, verification URLs are logged instead of emailed |
+
+Ingest and migration scripts additionally need `MCP_ADMIN_PASSWORD` + `MCP_INGEST_PASSWORD` — see `.env.example`.
+
+### Backups + restore drill
+
+`scripts/systemd/geo-mcp-backup.{service,timer}` run a nightly `pg_dump` of the `meta` schema to `/data/backups`. `scripts/restore-drill.sh` restores the latest dump into a scratch DB and asserts row counts.
 
 ---
 
 ## Licence
 
-MIT for the code. See [LICENSE](./LICENSE).
-
-Data licences vary by dataset — every tool response carries the specific attribution string for the data it used. Treat those as non-optional.
+MIT for the code. See [LICENSE](./LICENSE). Every tool response carries the specific attribution string for the data it used — treat those as non-optional.
