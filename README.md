@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK-specialist geospatial MCP server** for LLM agents. One HTTP endpoint, 20 tools, returning *decisions* (flood zone, listed-building match, recent comparable sales) rather than raw polygons an agent can't use.
+A **UK-specialist geospatial MCP server** for LLM agents. One HTTP endpoint, 21 tools, returning *decisions* (flood zone, listed-building match, recent comparable sales) rather than raw polygons an agent can't use.
 
 Built for the property-risk vertical — conveyancing, insurance, proptech — but useful anywhere a UK location question needs a structured answer.
 
@@ -42,6 +42,7 @@ Free tier. Rate-limited but no credit card required.
 ### Property
 | Tool | Input | Returns |
 |---|---|---|
+| `property_lookup_uk` | UPRN | OS Open UPRN coords (WGS84 + OSGB) + full admin + geology for the point |
 | `recent_sales_uk` | postcode, years | HMLR Price Paid Data — stats + up to 50 recent sales |
 | `energy_performance_uk` | postcode or UPRN | EPC certificate(s); includes `flood_re_year_signal` derived from age band |
 | `is_listed_building_uk` | lat, lon, tolerance_m | exact-point check against Historic England's NHLE |
@@ -74,7 +75,7 @@ All datasets used in the default build are **Open Government Licence v3.0** — 
 | Source | Dataset |
 |---|---|
 | ONS | ONSPD (postcodes) |
-| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50 |
+| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50, Open UPRN |
 | Environment Agency | Flood Zones, RoFRS, RoFSW (WMS), Recorded Flood Outlines |
 | Historic England | National Heritage List |
 | British Geological Survey | Geology 625k, GeoIndex boreholes |

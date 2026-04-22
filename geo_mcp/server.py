@@ -30,6 +30,7 @@ from geo_mcp.tools.geocoding import reverse_geocode_uk
 from geo_mcp.tools.geology import geology_uk
 from geo_mcp.tools.heritage import heritage_nearby_uk, is_listed_building_uk
 from geo_mcp.tools.price_paid import recent_sales_uk
+from geo_mcp.tools.property import property_lookup_uk
 from geo_mcp.tools.transforms import transform_coords
 
 log = logging.getLogger("geo_mcp")
@@ -58,6 +59,7 @@ def build_app() -> FastMCP:
     app.tool(heritage_nearby_uk)
     app.tool(recent_sales_uk)
     app.tool(energy_performance_uk)
+    app.tool(property_lookup_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
