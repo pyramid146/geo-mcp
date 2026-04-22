@@ -1,0 +1,12 @@
+[Unit]
+Description=Run geo-mcp meta-schema backup nightly
+
+[Timer]
+# 03:17 UTC every day — off-peak, far from Postgres autovacuum windows
+OnCalendar=*-*-* 03:17:00 UTC
+# Catch up after a missed run (laptop closed, host rebooted, etc.)
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

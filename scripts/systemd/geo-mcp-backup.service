@@ -1,0 +1,15 @@
+# Sample unit — edit User/Group and the two paths below to match your host
+# before installing. See scripts/systemd/README.md.
+[Unit]
+Description=geo-mcp meta-schema nightly backup
+After=network.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=CHANGEME
+Group=CHANGEME
+WorkingDirectory=/opt/geo-mcp
+ExecStart=/opt/geo-mcp/scripts/backup.sh
+StandardOutput=journal
+StandardError=journal
