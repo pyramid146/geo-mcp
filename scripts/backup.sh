@@ -46,3 +46,25 @@ for f in "${obsolete[@]}"; do
 done
 
 echo "[backup] ${#obsolete[@]} pruned; $(ls -1 "${BACKUP_DIR}"/meta-*.sql.gz 2>/dev/null | wc -l) retained."
+
+# Offsite sync. Skipped silently if no rclone remote is configured so the
+# local backup path works standalone. The remote name (default: r2) and
+# destination path are env-overridable; set GEO_MCP_OFFSITE_REMOTE="" to
+# disable entirely.
+readonly OFFSITE_REMOTE="${GEO_MCP_OFFSITE_REMOTE:-r2}"
+readonly OFFSITE_PATH="${GEO_MCP_OFFSITE_PATH:-geo-mcp-backups}"
+# systemd's default PATH doesn't include ~/.local/bin, so resolve rclone
+# explicitly with a cascade: explicit override → PATH → user-local.
+rclone_bin="${GEO_MCP_RCLONE:-$(command -v rclone || echo "$HOME/.local/bin/rclone")}"
+if [[ -n "$OFFSITE_REMOTE" ]] && [[ -x "$rclone_bin" ]] \
+   && "$rclone_bin" listremotes 2>/dev/null | grep -q "^${OFFSITE_REMOTE}:$"; then
+    echo "[backup] syncing ${BACKUP_DIR} → ${OFFSITE_REMOTE}:${OFFSITE_PATH}"
+    # --include pattern keeps irrelevant files (lock files, partial
+    # downloads, old restore-drill scratch) out of the offsite copy.
+    "$rclone_bin" sync "${BACKUP_DIR}" "${OFFSITE_REMOTE}:${OFFSITE_PATH}" \
+        --include 'meta-*.sql.gz' \
+        --fast-list
+    echo "[backup] offsite sync done"
+else
+    echo "[backup] offsite sync skipped (rclone '${rclone_bin}' missing or remote '${OFFSITE_REMOTE}' not configured)"
+fi
