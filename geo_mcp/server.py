@@ -30,7 +30,7 @@ from geo_mcp.tools.geocoding import reverse_geocode_uk
 from geo_mcp.tools.geology import geology_uk
 from geo_mcp.tools.heritage import heritage_nearby_uk, is_listed_building_uk
 from geo_mcp.tools.price_paid import recent_sales_uk
-from geo_mcp.tools.property import property_lookup_uk
+from geo_mcp.tools.property import property_lookup_uk, property_report_uk
 from geo_mcp.tools.transforms import transform_coords
 
 log = logging.getLogger("geo_mcp")
@@ -60,6 +60,7 @@ def build_app() -> FastMCP:
     app.tool(recent_sales_uk)
     app.tool(energy_performance_uk)
     app.tool(property_lookup_uk)
+    app.tool(property_report_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
@@ -169,7 +170,7 @@ def _wrap(title: str, body: str) -> str:
 
 _PAGE_ROOT = _wrap("geo-mcp", """
   <h1>geo-mcp</h1>
-  <p class="sub">UK-specialist geospatial MCP server — 21 tools for flood risk,
+  <p class="sub">UK-specialist geospatial MCP server — 22 tools for flood risk,
     property history, listed buildings, elevation, geocoding and more.</p>
   <p><a href="/signup">Get a free API key</a> ·
      <a href="https://github.com/pyramid146/geo-mcp">Source on GitHub</a> ·
