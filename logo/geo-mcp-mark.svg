@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="geo-mcp">
+  <title>geo-mcp · OS grid tile</title>
+  
+
+  
+  <rect x="22" y="22" width="76" height="76" fill="none" stroke="#0f1419" stroke-width="2.2"></rect>
+
+  
+  <g stroke="#0f1419" stroke-width="0.8" opacity="0.35">
+    <line x1="22" y1="47.3" x2="98" y2="47.3"></line>
+    <line x1="22" y1="72.6" x2="98" y2="72.6"></line>
+    <line x1="47.3" y1="22" x2="47.3" y2="98"></line>
+    <line x1="72.6" y1="22" x2="72.6" y2="98"></line>
+  </g>
+
+  
+  <rect x="47.3" y="47.3" width="25.3" height="25.3" fill="#0f1419" opacity="0.08"></rect>
+
+  
+  <g stroke="#0f1419" stroke-width="1.6">
+    <line x1="60" y1="16" x2="60" y2="22"></line>
+    <line x1="60" y1="98" x2="60" y2="104"></line>
+    <line x1="16" y1="60" x2="22" y2="60"></line>
+    <line x1="98" y1="60" x2="104" y2="60"></line>
+  </g>
+
+  
+  <circle cx="60" cy="60" r="3" fill="#b5603a"></circle>
+  <circle cx="60" cy="60" r="7" fill="none" stroke="#b5603a" stroke-width="1.2"></circle>
+</svg>

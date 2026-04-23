@@ -66,6 +66,16 @@ def build_app() -> FastMCP:
     async def root(_: Request) -> HTMLResponse:
         return HTMLResponse(_PAGE_ROOT)
 
+    @app.custom_route("/favicon.svg", methods=["GET"])
+    async def favicon(_: Request) -> HTMLResponse:
+        # Mono mark — per brand guide, avoid the accent fill at favicon
+        # sizes (inner rings collapse at ~16px).
+        return HTMLResponse(
+            _MARK_SVG_MONO,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     @app.custom_route("/signup", methods=["GET"])
     async def signup_form(_: Request) -> HTMLResponse:
         return HTMLResponse(_PAGE_SIGNUP_FORM)
@@ -137,91 +147,82 @@ def build_app() -> FastMCP:
 # Jinja2 + a real asset tree in.
 # ---------------------------------------------------------------------------
 
-# Stylised fantasy-map landmass + offshore islands, outline-only.
-# Deliberately not any real-world coastline; just an evocative silhouette.
-# vector-effect="non-scaling-stroke" keeps the stroke weight visually
-# consistent whether the SVG renders at 22px (header) or 420px (hero).
-_UK_SVG = """\
-<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
-     fill="none" stroke="currentColor" stroke-width="2"
-     stroke-linejoin="round" stroke-linecap="round"
-     vector-effect="non-scaling-stroke">
-  <path vector-effect="non-scaling-stroke" d="
-    M 62 6
-    L 57 16
-    L 64 22
-    C 60 30, 50 30, 42 24
-    L 34 30
-    C 24 32, 18 44, 28 50
-    L 22 58
-    C 16 70, 24 80, 32 82
-    L 26 94
-    C 34 100, 42 98, 48 102
-    L 44 114
-    L 54 112
-    L 60 106
-    L 68 108
-    C 80 104, 88 94, 84 82
-    L 92 72
-    C 96 62, 90 50, 82 44
-    L 88 32
-    L 78 30
-    L 74 22
-    L 68 18
-    Z
-  "/>
-  <path vector-effect="non-scaling-stroke" d="
-    M 94 68
-    L 97 65
-    L 99 69
-    L 96 72
-    Z
-  "/>
-  <path vector-effect="non-scaling-stroke" d="
-    M 50 120
-    L 54 118
-    L 57 121
-    L 55 124
-    L 51 123
-    Z
-  "/>
-  <path vector-effect="non-scaling-stroke" d="
-    M 30 106
-    L 33 105
-    L 34 108
-    L 31 109
-    Z
-  "/>
+# Brand mark: OS grid-tile with centred bullseye. Two variants:
+#   _MARK_SVG       — full-colour (warm terracotta accent) for hero + primary contexts
+#   _MARK_SVG_MONO  — single-ink (currentColor) for header, favicon, small-sized use
+# Brand tokens (see logo/README): ink #0f1419, cream #f5f1e8, warm #b5603a.
+_MARK_SVG = """\
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="22" y="22" width="76" height="76" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <g stroke="currentColor" stroke-width="0.8" opacity="0.35">
+    <line x1="22" y1="47.3" x2="98" y2="47.3"/>
+    <line x1="22" y1="72.6" x2="98" y2="72.6"/>
+    <line x1="47.3" y1="22" x2="47.3" y2="98"/>
+    <line x1="72.6" y1="22" x2="72.6" y2="98"/>
+  </g>
+  <rect x="47.3" y="47.3" width="25.3" height="25.3" fill="currentColor" opacity="0.08"/>
+  <g stroke="currentColor" stroke-width="1.6">
+    <line x1="60" y1="16" x2="60" y2="22"/>
+    <line x1="60" y1="98" x2="60" y2="104"/>
+    <line x1="16" y1="60" x2="22" y2="60"/>
+    <line x1="98" y1="60" x2="104" y2="60"/>
+  </g>
+  <circle cx="60" cy="60" r="3" fill="var(--accent)"/>
+  <circle cx="60" cy="60" r="7" fill="none" stroke="var(--accent)" stroke-width="1.2"/>
+</svg>
+"""
+
+_MARK_SVG_MONO = """\
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="22" y="22" width="76" height="76" fill="none" stroke="currentColor" stroke-width="2.2"/>
+  <g stroke="currentColor" stroke-width="0.8" opacity="0.35">
+    <line x1="22" y1="47.3" x2="98" y2="47.3"/>
+    <line x1="22" y1="72.6" x2="98" y2="72.6"/>
+    <line x1="47.3" y1="22" x2="47.3" y2="98"/>
+    <line x1="72.6" y1="22" x2="72.6" y2="98"/>
+  </g>
+  <rect x="47.3" y="47.3" width="25.3" height="25.3" fill="currentColor" opacity="0.08"/>
+  <g stroke="currentColor" stroke-width="1.6">
+    <line x1="60" y1="16" x2="60" y2="22"/>
+    <line x1="60" y1="98" x2="60" y2="104"/>
+    <line x1="16" y1="60" x2="22" y2="60"/>
+    <line x1="98" y1="60" x2="104" y2="60"/>
+  </g>
+  <circle cx="60" cy="60" r="3" fill="currentColor"/>
+  <circle cx="60" cy="60" r="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
 </svg>
 """
 
 _CSS = """\
   :root {
     color-scheme: light dark;
-    --paper: #f6f5f1;
-    --paper-soft: #efece4;
-    --ink: #14181f;
-    --ink-muted: #5a5e67;
-    --border: #e0dccf;
-    --accent: #0b5d6e;
+    /* Brand tokens — see logo/README. */
+    --paper: #f5f1e8;
+    --paper-soft: #ece7d9;
+    --ink: #0f1419;
+    --ink-muted: #586068;
+    --border: #ddd5c2;
+    --accent: #b5603a;       /* warm terracotta — brand stamp hue */
     --accent-ink: #ffffff;
+    /* Domain colours — still used for prompt-card rails. Property hue
+       intentionally aligned with brand accent for cohesion. */
     --c-flood: #1e6091;
-    --c-property: #b06a1f;
+    --c-property: #b5603a;
     --c-heritage: #7a1f1f;
     --c-ground: #6b5d2b;
     --c-geocoding: #2d5f4a;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --paper: #10141b;
-      --paper-soft: #1a1f28;
-      --ink: #e8e6e1;
-      --ink-muted: #949aa4;
-      --border: #2a2f39;
-      --accent: #5fbcc8;
-      --accent-ink: #062028;
+      --paper: #0f1419;
+      --paper-soft: #1a1f27;
+      --ink: #f5f1e8;
+      --ink-muted: #8f949a;
+      --border: #2a2f38;
+      --accent: #d0734a;
+      --accent-ink: #0f1419;
       --c-flood: #65a8d6;
-      --c-property: #d89761;
+      --c-property: #d0734a;
       --c-heritage: #d47475;
       --c-ground: #c3b584;
       --c-geocoding: #71b897;
@@ -276,7 +277,7 @@ _CSS = """\
     color: var(--ink);
   }
   .logo:hover { text-decoration: none; }
-  .logo svg { width: 22px; height: 28px; color: var(--accent); display: block; }
+  .logo svg { width: 28px; height: 28px; display: block; color: var(--ink); }
   .site-nav a {
     color: var(--ink-muted);
     margin-left: 1.5rem;
@@ -292,19 +293,16 @@ _CSS = """\
   }
   .hero-bg {
     position: absolute;
-    right: 1rem;
-    top: 1rem;
-    opacity: 0.22;
+    right: 1.5rem;
+    top: 2rem;
     pointer-events: none;
-    color: var(--ink-muted);
+    color: var(--ink);
+    opacity: 0.9;
   }
   .hero-bg svg {
-    width: clamp(180px, 30vw, 340px);
+    width: clamp(180px, 26vw, 300px);
     height: auto;
     display: block;
-  }
-  @media (prefers-color-scheme: dark) {
-    .hero-bg { opacity: 0.3; }
   }
   @media (max-width: 780px) {
     .hero-bg { display: none; }
@@ -522,12 +520,13 @@ document.addEventListener('click', e => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(title)}</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <style>{_CSS}</style>
 </head>
 <body>
 <header class="site-header">
   <div class="container">
-    <a class="logo" href="/">{_UK_SVG}<span>geo-mcp</span></a>
+    <a class="logo" href="/">{_MARK_SVG_MONO}<span>geo-mcp</span></a>
     <nav class="site-nav">
       <a href="/signup">Sign up</a>
       <a href="/health">Health</a>
@@ -555,7 +554,7 @@ def _wrap(title: str, body: str) -> str:
 _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
 <div class="container">
   <section class="hero">
-    <div class="hero-bg">""" + _UK_SVG + """</div>
+    <div class="hero-bg">""" + _MARK_SVG + """</div>
     <h1>UK geospatial data, made for LLM agents.</h1>
     <p class="sub">22 tools covering flood risk, property records, heritage,
       geology, elevation, and geocoding — all built on UK open-data sources
