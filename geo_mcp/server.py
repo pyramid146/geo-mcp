@@ -19,6 +19,7 @@ from geo_mcp.tools.crime import crime_nearby_uk
 from geo_mcp.tools.deprivation import deprivation_uk
 from geo_mcp.tools.designated_sites import designated_sites_nearby_uk
 from geo_mcp.tools.greenspace import green_space_nearby_uk
+from geo_mcp.tools.rivers import river_nearby_uk
 from geo_mcp.tools.schools import schools_nearby_uk
 from geo_mcp.tools.distance import distance_between
 from geo_mcp.tools.elevation import elevation
@@ -75,6 +76,7 @@ def build_app() -> FastMCP:
     app.tool(green_space_nearby_uk)
     app.tool(schools_nearby_uk)
     app.tool(deprivation_uk)
+    app.tool(river_nearby_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
