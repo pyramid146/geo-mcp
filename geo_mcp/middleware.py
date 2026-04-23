@@ -35,7 +35,7 @@ current_auth: ContextVar[AuthContext | None] = ContextVar("current_auth", defaul
 # probe), the root landing page, and the self-service signup + verify
 # endpoints — those *are* what mints a key, so can't require one.
 _PUBLIC_PATHS: frozenset[str] = frozenset({
-    "/", "/health", "/signup", "/signup/verify", "/favicon.svg",
+    "/", "/health", "/status", "/signup", "/signup/verify", "/favicon.svg",
 })
 
 

@@ -115,15 +115,18 @@ def build_app() -> FastMCP:
 
     @app.custom_route("/health", methods=["GET"])
     async def health(_: Request) -> JSONResponse:
-        """Liveness + readiness probe. Unauthenticated (bypassed in AuthMiddleware)."""
+        """Liveness + readiness probe. Unauthenticated (bypassed in AuthMiddleware).
+
+        Deliberately minimal — no meta table row counts, usage figures, or
+        any other operational signal that'd let an observer trend our
+        customer base. Upstream monitoring (UptimeRobot etc.) only needs
+        the 200 vs 503 status code + the boolean postgres flag.
+        """
         postgres_ok = False
-        meta_rows: dict[str, int | None] = {"customers": None, "api_keys": None, "usage_log": None}
         try:
             pool = await get_pool()
             async with pool.acquire() as conn:
                 await conn.execute("SELECT 1")
-                for table in meta_rows:
-                    meta_rows[table] = await conn.fetchval(f"SELECT COUNT(*) FROM meta.{table}")
             postgres_ok = True
         except Exception:
             log.exception("/health: postgres probe failed")
@@ -133,9 +136,23 @@ def build_app() -> FastMCP:
             "status": "ok" if postgres_ok else "degraded",
             "postgres": postgres_ok,
             "tools": len(tools),
-            "meta_rows": meta_rows,
         }
         return JSONResponse(body, status_code=200 if postgres_ok else 503)
+
+    @app.custom_route("/status", methods=["GET"])
+    async def status_page(_: Request) -> HTMLResponse:
+        """Human-readable status — 'Operational' / 'Degraded' plain-English
+        page rendered in the brand shell. No counts or internals."""
+        postgres_ok = False
+        try:
+            pool = await get_pool()
+            async with pool.acquire() as conn:
+                await conn.execute("SELECT 1")
+            postgres_ok = True
+        except Exception:
+            log.exception("/status: postgres probe failed")
+        return HTMLResponse(_page_status(postgres_ok),
+                            status_code=200 if postgres_ok else 503)
 
     return app
 
@@ -437,6 +454,23 @@ _CSS = """\
   }
   .hp { position: absolute; left: -9999px; }
 
+  /* Status page */
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: .9rem;
+  }
+  .status-row h1 { margin: 0; }
+  .status-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    box-shadow: 0 0 0 4px rgba(0,0,0,0.05);
+  }
+  .status-dot.dot-ok { background: var(--c-geocoding); }
+  .status-dot.dot-bad { background: var(--c-heritage); }
+
   /* Key display + copy */
   .notice {
     padding: .9rem 1.1rem;
@@ -529,7 +563,7 @@ document.addEventListener('click', e => {
     <a class="logo" href="/">{_MARK_SVG_MONO}<span>geo-mcp</span></a>
     <nav class="site-nav">
       <a href="/signup">Sign up</a>
-      <a href="/health">Health</a>
+      <a href="/status">Status</a>
     </nav>
   </div>
 </header>
@@ -562,7 +596,7 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
       HMLR, MHCLG). Returns decisions an LLM can act on, not raw polygons.</p>
     <div class="hero-ctas">
       <a class="btn" href="/signup">Get a free API key</a>
-      <a class="btn btn-ghost" href="/health">Service status</a>
+      <a class="btn btn-ghost" href="/status">Service status</a>
     </div>
   </section>
 
@@ -684,6 +718,34 @@ def _page_signup_success(email: str, api_key: str) -> str:
 </div>
 """
     return _shell("Your geo-mcp API key", body, include_copy_js=True)
+
+
+def _page_status(ok: bool) -> str:
+    """Plain-English service status — no row counts, no internals."""
+    if ok:
+        headline = "All systems operational"
+        sub = ("The geo-mcp service is accepting requests and the "
+               "backing database is reachable.")
+        dot_class = "dot-ok"
+    else:
+        headline = "Service degraded"
+        sub = ("The geo-mcp service is reachable but its backing database "
+               "isn't responding. Tool calls will fail until this resolves.")
+        dot_class = "dot-bad"
+    body = f"""
+<div class="container-narrow">
+  <section class="hero">
+    <div class="status-row">
+      <span class="status-dot {dot_class}" aria-hidden="true"></span>
+      <h1>{html.escape(headline)}</h1>
+    </div>
+    <p class="sub">{html.escape(sub)}</p>
+    <p class="form-hint">Last checked: just now. This page is live —
+       reload to re-probe.</p>
+  </section>
+</div>
+"""
+    return _shell("Status — geo-mcp", body)
 
 
 def _page_error(message: str) -> str:
