@@ -51,10 +51,12 @@ Every response carries its data source and licence attribution, so an agent surf
 
 ### Claude Desktop (Windows / macOS)
 
-Open the config file via **File → Settings → Developer → Edit Config**. It'll open `claude_desktop_config.json` in your default editor (if you'd rather navigate to it directly):
+Open the config file via **File → Settings → Developer → Edit Config** (or navigate directly):
 
 - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Claude Desktop's MCP support is stdio-based across releases, so use the `mcp-remote` bridge — a tiny Node process that forwards stdio to a remote HTTP MCP server. Requires Node.js installed (`node --version` to check; if missing, grab LTS from nodejs.org).
 
 Add (or merge into) the `mcpServers` block:
 
@@ -62,15 +64,20 @@ Add (or merge into) the `mcpServers` block:
 {
   "mcpServers": {
     "geo-mcp": {
-      "type": "http",
-      "url": "https://geomcp.dev/mcp",
-      "headers": { "Authorization": "Bearer gmcp_live_..." }
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://geomcp.dev/mcp",
+        "--header",
+        "Authorization: Bearer gmcp_live_..."
+      ]
     }
   }
 }
 ```
 
-Restart Claude Desktop. The geo-mcp tools should appear in the tool picker.
+**Fully quit Claude Desktop** (tray-icon → Quit, not just close the window) and relaunch. The geo-mcp tools should appear in the tool picker after a ~5-second first-launch bridge download.
 
 ### Claude Code (CLI)
 
