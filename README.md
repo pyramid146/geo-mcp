@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 22 tools covering flood risk, property records, heritage, geology, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 23 tools covering flood risk, property records, heritage, geology, crime, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -175,6 +175,11 @@ Free tier, rate-limited, no card required.
 | `geology_uk` | lat, lon | BGS 625k bedrock + superficial formation, age, rock type |
 | `boreholes_nearby_uk` | lat, lon, radius_m | BGS GeoIndex boreholes with scan URLs |
 
+### Crime
+| Tool | Input | Returns |
+|---|---|---|
+| `crime_nearby_uk` | lat, lon, radius_m, months | police.uk street-level incidents — total + breakdown by crime type + monthly trend |
+
 ### Geocoding / geometry
 | Tool | Input | Returns |
 |---|---|---|
@@ -202,6 +207,7 @@ All datasets used in the default build are **Open Government Licence v3.0** — 
 | British Geological Survey | Geology 625k, GeoIndex boreholes |
 | HM Land Registry | Price Paid Data |
 | MHCLG | EPC Register |
+| Police forces (via data.police.uk) | Street-level crime incidents |
 
 The server itself is MIT-licensed — see [LICENSE](./LICENSE).
 
