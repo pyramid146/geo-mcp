@@ -1,8 +1,45 @@
 # geo-mcp
 
-A **UK-specialist geospatial MCP server** for LLM agents. One HTTP endpoint, 22 tools, returning *decisions* (flood zone, listed-building match, recent comparable sales) rather than raw polygons an agent can't use.
+A **UK geospatial MCP server** for LLM agents. 22 tools covering flood risk, property records, heritage, geology, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
-Built for the property-risk vertical — conveyancing, insurance, proptech — but useful anywhere a UK location question needs a structured answer.
+Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
+
+---
+
+## What you can ask
+
+Once connected, an agent can answer questions it otherwise can't. Some examples:
+
+**Flood and water**
+- "What's the flood risk at 12 Mill Lane, Tewkesbury GL20 5BY?"
+- "Has the area around CB3 9AX ever flooded, and how recently?"
+- "Is this postcode in a Flood Zone 2 or 3 for planning purposes?"
+- "How does surface water risk differ from river risk at this point?"
+
+**Property**
+- "Give me a full property report for UPRN 10033544614" *(returns flood, EPC, sales, heritage, elevation in one call)*
+- "What have flats sold for in SW1A 1AA in the last 5 years?"
+- "What's the EPC rating and construction age of this property?"
+- "Would this property be eligible for Flood Re?"
+
+**Heritage and planning**
+- "Is 10 Downing Street a listed building?"
+- "List scheduled monuments within 500 m of this coordinate"
+- "Can a new dwelling be built at this location under NPPF?"
+- "What heritage designations affect the area around the Tower of London?"
+
+**Ground and elevation**
+- "What's the bedrock at 51.5014, -0.1419?"
+- "Are there any BGS borehole records within 1 km of this point?"
+- "What's the elevation profile for this postcode area?"
+
+**Geocoding and geometry**
+- "Where is SW1A 1AA?"
+- "What postcode is closest to 51.5014, -0.1419, and what's the full admin hierarchy?"
+- "How far is it between these two UK points, as the crow flies and projected?"
+- "Convert these British National Grid coordinates to WGS84"
+
+Every response carries its data source and licence attribution, so an agent surfacing answers to users can credit them correctly.
 
 ---
 
@@ -21,7 +58,7 @@ Built for the property-risk vertical — conveyancing, insurance, proptech — b
    }
    ```
 
-Free tier. Rate-limited but no credit card required.
+Free tier, rate-limited, no card required.
 
 ---
 
@@ -137,7 +174,7 @@ Ingest and migration scripts additionally need `MCP_ADMIN_PASSWORD` + `MCP_INGES
 
 ### Backups + restore drill
 
-`scripts/systemd/geo-mcp-backup.{service,timer}` run a nightly `pg_dump` of the `meta` schema to `/data/backups`. `scripts/restore-drill.sh` restores the latest dump into a scratch DB and asserts row counts.
+`scripts/systemd/geo-mcp-backup.{service,timer}` run a nightly `pg_dump` of the `meta` schema to `/data/backups`, and optionally rclone-sync it to an S3-compatible offsite (Cloudflare R2, Backblaze B2) if an `r2` remote is configured. `scripts/restore-drill.sh` restores the latest dump into a scratch DB and asserts row counts.
 
 ---
 

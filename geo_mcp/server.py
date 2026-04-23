@@ -170,10 +170,21 @@ def _wrap(title: str, body: str) -> str:
 
 _PAGE_ROOT = _wrap("geo-mcp", """
   <h1>geo-mcp</h1>
-  <p class="sub">UK-specialist geospatial MCP server — 22 tools for flood risk,
-    property history, listed buildings, elevation, geocoding and more.</p>
+  <p class="sub">A UK geospatial MCP server for LLM agents — 22 tools covering
+    flood risk, property records, heritage, geology, elevation, and geocoding.</p>
+  <p>Built on UK open-data sources (ONS, Ordnance Survey, Environment Agency,
+    Historic England, BGS, HMLR, MHCLG). Returns decisions an LLM can act on,
+    not raw polygons.</p>
+  <h2>What an agent can ask</h2>
+  <ul>
+    <li>“What's the flood risk at GL20 5BY, and has it actually flooded before?”</li>
+    <li>“Give me a full property report for UPRN 10033544614.”</li>
+    <li>“What have flats in SW1A 1AA sold for in the last 5 years?”</li>
+    <li>“Is 10 Downing Street a listed building?”</li>
+    <li>“What's the bedrock at 51.5014, -0.1419?”</li>
+    <li>“Can a new dwelling be built at this location under NPPF?”</li>
+  </ul>
   <p><a href="/signup">Get a free API key</a> ·
-     <a href="https://github.com/pyramid146/geo-mcp">Source on GitHub</a> ·
      <a href="/health">Health</a></p>
 """)
 
