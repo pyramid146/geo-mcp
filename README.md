@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 31 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, deprivation, rivers, roads, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 32 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, healthcare, deprivation, rivers, roads, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -175,6 +175,7 @@ Free tier, rate-limited, no card required.
 | `deprivation_uk` | postcode or lat/lon | IMD 2019 decile + rank for the resolved LSOA (England) |
 | `river_nearby_uk` | lat, lon, radius_m | OS Open Rivers — nearest named watercourse + nearby named rivers (form: river / tidalRiver / canal / lake) |
 | `road_nearby_uk` | lat, lon, radius_m, classes? | OS Open Roads — nearest Motorway / A / B road, per-class nearest, unique nearby roads by number + name |
+| `gp_practices_nearby_uk` | lat, lon, radius_m, active_only? | NHS ODS GP practices + branches within radius |
 
 ### Ground / geotech
 | Tool | Input | Returns |
