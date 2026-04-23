@@ -131,82 +131,505 @@ def build_app() -> FastMCP:
 
 
 # ---------------------------------------------------------------------------
-# Minimal HTML pages for the self-service signup flow.
-# Kept inline (rather than a templating engine) to avoid a dependency. If
-# this grows past half a dozen pages, pull Jinja2 in.
+# HTML page templates for the self-service signup flow.
+# All inline (CSS + SVG + minimal JS) so the server is a single Python
+# file with no static-asset pipeline. If this grows past ten pages, pull
+# Jinja2 + a real asset tree in.
 # ---------------------------------------------------------------------------
 
+# Simplified British Isles SVG — evocative, not cartographically accurate.
+# Two paths: GB (main island) + Ireland (with NI). viewBox 100x130.
+_UK_SVG = """\
+<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <path fill="currentColor" d="
+    M 55 4
+    C 59 8 62 14 63 22
+    C 64 28 61 33 58 36
+    C 62 38 65 43 64 48
+    C 72 50 76 54 76 60
+    C 76 66 72 71 68 72
+    L 72 82
+    L 70 92
+    L 64 96
+    L 64 104
+    L 58 110
+    L 52 112
+    L 47 108
+    L 45 100
+    L 40 102
+    L 35 98
+    L 37 90
+    L 32 86
+    L 28 78
+    L 32 72
+    L 38 70
+    L 36 64
+    L 40 56
+    L 46 50
+    L 42 42
+    L 44 32
+    L 48 22
+    L 50 10
+    Z
+  "/>
+  <path fill="currentColor" d="
+    M 14 66
+    L 20 60
+    L 26 62
+    L 28 70
+    L 25 78
+    L 18 80
+    L 12 74
+    Z
+  "/>
+</svg>
+"""
+
 _CSS = """\
-  :root { color-scheme: light dark; }
-  body { font: 16px/1.5 system-ui, -apple-system, sans-serif; max-width: 640px;
-         margin: 4em auto; padding: 0 1em; }
-  h1 { margin-bottom: .25em; }
-  .sub { color: #666; margin-top: 0; }
-  input[type=email] { padding: .6em .75em; width: 100%; font-size: 1em;
-                      border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; }
-  button { padding: .6em 1.2em; font-size: 1em; border: 0; border-radius: 6px;
-           background: #1b6ef3; color: white; cursor: pointer; margin-top: .75em; }
-  button:hover { background: #1557c0; }
-  .hp { position: absolute; left: -9999px; }
-  pre { background: #f4f4f4; padding: 1em; border-radius: 6px; overflow-x: auto;
-        font-size: .9em; }
-  .key { font-family: ui-monospace, monospace; word-break: break-all; }
-  .notice { background: #fff3cd; border: 1px solid #ffe69c; padding: .75em 1em;
-            border-radius: 6px; margin: 1em 0; }
+  :root {
+    color-scheme: light dark;
+    --paper: #f6f5f1;
+    --paper-soft: #efece4;
+    --ink: #14181f;
+    --ink-muted: #5a5e67;
+    --border: #e0dccf;
+    --accent: #0b5d6e;
+    --accent-ink: #ffffff;
+    --c-flood: #1e6091;
+    --c-property: #b06a1f;
+    --c-heritage: #7a1f1f;
+    --c-ground: #6b5d2b;
+    --c-geocoding: #2d5f4a;
+  }
   @media (prefers-color-scheme: dark) {
-    pre { background: #1e1e1e; } .notice { background: #3a2f00; border-color: #6b5800; }
+    :root {
+      --paper: #10141b;
+      --paper-soft: #1a1f28;
+      --ink: #e8e6e1;
+      --ink-muted: #949aa4;
+      --border: #2a2f39;
+      --accent: #5fbcc8;
+      --accent-ink: #062028;
+      --c-flood: #65a8d6;
+      --c-property: #d89761;
+      --c-heritage: #d47475;
+      --c-ground: #c3b584;
+      --c-geocoding: #71b897;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font: 17px/1.55 system-ui, -apple-system, "Segoe UI Variable", "Segoe UI",
+          "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, pre { font-family: ui-monospace, "SF Mono", "Cascadia Code",
+              "Roboto Mono", Menlo, monospace; }
+  code { font-size: .93em; }
+  pre {
+    background: var(--paper-soft);
+    border: 1px solid var(--border);
+    padding: 1em 1.25em;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: .85rem;
+    line-height: 1.55;
+    margin: 1rem 0;
+  }
+  .container { max-width: 68rem; margin: 0 auto; padding: 0 1.5rem; }
+  .container-narrow { max-width: 40rem; margin: 0 auto; padding: 0 1.5rem; }
+
+  /* Header */
+  .site-header {
+    border-bottom: 1px solid var(--border);
+    padding: 1rem 0;
+  }
+  .site-header .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .logo {
+    display: inline-flex;
+    align-items: center;
+    gap: .55em;
+    font-weight: 700;
+    font-size: 1.05rem;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .logo:hover { text-decoration: none; }
+  .logo svg { width: 22px; height: 28px; color: var(--accent); display: block; }
+  .site-nav a {
+    color: var(--ink-muted);
+    margin-left: 1.5rem;
+    font-size: .92em;
+  }
+  .site-nav a:hover { color: var(--ink); text-decoration: none; }
+
+  /* Hero */
+  .hero {
+    padding: 4.5rem 0 3rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute;
+    right: -4rem;
+    top: -1rem;
+    bottom: 0;
+    opacity: 0.06;
+    pointer-events: none;
+    color: var(--ink);
+  }
+  .hero-bg svg { width: 420px; height: auto; }
+  .hero h1 {
+    font-size: clamp(2.1rem, 5vw, 3.25rem);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin: 0 0 .5em;
+    max-width: 22ch;
+    position: relative;
+  }
+  .hero .sub {
+    font-size: 1.1rem;
+    color: var(--ink-muted);
+    max-width: 54ch;
+    margin: 0 0 1.5rem;
+    position: relative;
+  }
+  .hero-ctas { position: relative; margin-top: 1.75rem; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    padding: .75em 1.35em;
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-radius: 6px;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 500;
+    text-decoration: none;
+    font-size: 1rem;
+  }
+  .btn:hover { opacity: 0.92; text-decoration: none; }
+  .btn-ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--border);
+    margin-left: .5rem;
+  }
+
+  /* Section headings */
+  h2 {
+    font-size: 1.5rem;
+    letter-spacing: -0.015em;
+    margin: 3rem 0 1.25rem;
+  }
+  .section-lead {
+    color: var(--ink-muted);
+    margin: 0 0 1.75rem;
+    max-width: 60ch;
+  }
+
+  /* Domain prompt cards */
+  .prompt-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin: 0 0 3rem;
+  }
+  .prompt-card {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--domain, var(--ink));
+    border-radius: 4px;
+    padding: 1.1rem 1.35rem 1.25rem;
+    background: var(--paper);
+  }
+  .prompt-card h3 {
+    margin: 0 0 .75rem;
+    font-size: .72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--domain);
+    font-weight: 600;
+  }
+  .prompt-card ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .prompt-card li {
+    margin: .45rem 0;
+    font-size: .94rem;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .prompt-card li::before {
+    content: "“";
+    color: var(--domain);
+    font-weight: 700;
+    margin-right: .1em;
+  }
+  .prompt-card li::after {
+    content: "”";
+    color: var(--domain);
+    font-weight: 700;
+    margin-left: .1em;
+  }
+
+  /* Forms */
+  form { margin: 1.5rem 0 0; }
+  label {
+    display: block;
+    font-weight: 500;
+    font-size: .9rem;
+    color: var(--ink-muted);
+    margin-bottom: .4rem;
+  }
+  input[type=email] {
+    padding: .75rem 1rem;
+    width: 100%;
+    font: inherit;
+    font-size: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  input[type=email]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(11, 93, 110, 0.18);
+  }
+  .form-actions { margin-top: 1rem; }
+  .form-hint {
+    margin-top: 1rem;
+    font-size: .88rem;
+    color: var(--ink-muted);
+  }
+  .hp { position: absolute; left: -9999px; }
+
+  /* Key display + copy */
+  .notice {
+    padding: .9rem 1.1rem;
+    border-radius: 6px;
+    background: rgba(176, 106, 31, 0.08);
+    color: var(--ink);
+    border-left: 3px solid var(--c-property);
+    margin: 1.25rem 0;
+    font-size: .95rem;
+  }
+  .key-wrap {
+    position: relative;
+    margin: 1rem 0 1.5rem;
+  }
+  .key-box {
+    padding: 1rem 1.25rem;
+    padding-right: 5.5rem;
+    background: var(--paper-soft);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    font-size: 0.95rem;
+    word-break: break-all;
+    line-height: 1.45;
+  }
+  .copy-btn {
+    position: absolute;
+    right: .75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: .4em .8em;
+    background: var(--ink);
+    color: var(--paper);
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: .82rem;
+    font-family: inherit;
+  }
+  .copy-btn.copied { background: var(--c-geocoding); }
+
+  /* Footer */
+  .site-footer {
+    margin-top: 4rem;
+    border-top: 1px solid var(--border);
+    padding: 1.5rem 0 2rem;
+    color: var(--ink-muted);
+    font-size: .88rem;
+  }
+  .site-footer .container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    justify-content: space-between;
   }
 """
 
 
+def _shell(title: str, body: str, *, include_copy_js: bool = False) -> str:
+    """Base HTML shell: shared header, main slot, footer."""
+    copy_js = ""
+    if include_copy_js:
+        copy_js = """
+<script>
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const target = document.getElementById(btn.dataset.target);
+  if (!target) return;
+  navigator.clipboard.writeText(target.textContent.trim()).then(() => {
+    const original = btn.textContent;
+    btn.textContent = 'Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = original; btn.classList.remove('copied'); }, 1800);
+  });
+});
+</script>"""
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{html.escape(title)}</title>
+<style>{_CSS}</style>
+</head>
+<body>
+<header class="site-header">
+  <div class="container">
+    <a class="logo" href="/">{_UK_SVG}<span>geo-mcp</span></a>
+    <nav class="site-nav">
+      <a href="/signup">Sign up</a>
+      <a href="/health">Health</a>
+    </nav>
+  </div>
+</header>
+<main>
+{body}
+</main>
+<footer class="site-footer">
+  <div class="container">
+    <span>UK open-data MCP server · OGLv3 · MIT-licensed code</span>
+    <span>geomcp.dev</span>
+  </div>
+</footer>{copy_js}
+</body>
+</html>"""
+
+
+# Backwards-compat wrapper (some older callers still use it; no-op harm).
 def _wrap(title: str, body: str) -> str:
-    return (
-        f"<!doctype html><html><head><meta charset='utf-8'>"
-        f"<meta name='viewport' content='width=device-width,initial-scale=1'>"
-        f"<title>{html.escape(title)}</title><style>{_CSS}</style></head>"
-        f"<body>{body}</body></html>"
-    )
+    return _shell(title, f'<div class="container-narrow"><div class="hero">{body}</div></div>')
 
 
-_PAGE_ROOT = _wrap("geo-mcp", """
-  <h1>geo-mcp</h1>
-  <p class="sub">A UK geospatial MCP server for LLM agents — 22 tools covering
-    flood risk, property records, heritage, geology, elevation, and geocoding.</p>
-  <p>Built on UK open-data sources (ONS, Ordnance Survey, Environment Agency,
-    Historic England, BGS, HMLR, MHCLG). Returns decisions an LLM can act on,
-    not raw polygons.</p>
+_PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
+<div class="container">
+  <section class="hero">
+    <div class="hero-bg">""" + _UK_SVG + """</div>
+    <h1>UK geospatial data, made for LLM agents.</h1>
+    <p class="sub">22 tools covering flood risk, property records, heritage,
+      geology, elevation, and geocoding — all built on UK open-data sources
+      (ONS, Ordnance Survey, Environment Agency, Historic England, BGS,
+      HMLR, MHCLG). Returns decisions an LLM can act on, not raw polygons.</p>
+    <div class="hero-ctas">
+      <a class="btn" href="/signup">Get a free API key</a>
+      <a class="btn btn-ghost" href="/health">Service status</a>
+    </div>
+  </section>
+
   <h2>What an agent can ask</h2>
-  <ul>
-    <li>“What's the flood risk at GL20 5BY, and has it actually flooded before?”</li>
-    <li>“Give me a full property report for UPRN 10033544614.”</li>
-    <li>“What have flats in SW1A 1AA sold for in the last 5 years?”</li>
-    <li>“Is 10 Downing Street a listed building?”</li>
-    <li>“What's the bedrock at 51.5014, -0.1419?”</li>
-    <li>“Can a new dwelling be built at this location under NPPF?”</li>
-  </ul>
-  <p><a href="/signup">Get a free API key</a> ·
-     <a href="/health">Health</a></p>
+  <p class="section-lead">Once connected, an agent can answer questions
+  it otherwise can't — grounded in current, attributable UK open data.</p>
+
+  <div class="prompt-grid">
+    <div class="prompt-card" style="--domain: var(--c-flood);">
+      <h3>Flood</h3>
+      <ul>
+        <li>What's the flood risk at GL20 5BY, and has it actually flooded before?</li>
+        <li>Is this postcode in Flood Zone 2 or 3 for planning?</li>
+        <li>Would this property be eligible for Flood Re?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-property);">
+      <h3>Property</h3>
+      <ul>
+        <li>Give me a full property report for UPRN 10033544614.</li>
+        <li>What have flats sold for in SW1A 1AA in the last 5 years?</li>
+        <li>What's the EPC rating and construction age of this property?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-heritage);">
+      <h3>Heritage &amp; planning</h3>
+      <ul>
+        <li>Is 10 Downing Street a listed building?</li>
+        <li>Scheduled monuments within 500 m of this coordinate?</li>
+        <li>Can a new dwelling be built here under NPPF?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-ground);">
+      <h3>Ground &amp; elevation</h3>
+      <ul>
+        <li>What's the bedrock at 51.5014, -0.1419?</li>
+        <li>Any BGS boreholes within 1 km of this point?</li>
+        <li>What's the elevation profile for this postcode area?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-geocoding);">
+      <h3>Geocoding</h3>
+      <ul>
+        <li>Where is SW1A 1AA?</li>
+        <li>What postcode is closest to these coordinates?</li>
+        <li>Convert these British National Grid coordinates to WGS84.</li>
+      </ul>
+    </div>
+  </div>
+</div>
 """)
 
 
-_PAGE_SIGNUP_FORM = _wrap("Sign up — geo-mcp", """
-  <h1>Get a free API key</h1>
-  <p class="sub">Enter your email. We'll send a confirmation link; clicking it
-    reveals your key exactly once.</p>
-  <form method="POST" action="/signup">
-    <input class="hp" type="text" name="hp" tabindex="-1" autocomplete="off">
-    <label for="email">Email</label>
-    <input id="email" name="email" type="email" required autofocus>
-    <br><button type="submit">Send confirmation email</button>
-  </form>
+_PAGE_SIGNUP_FORM = _shell("Get an API key — geo-mcp", """
+<div class="container-narrow">
+  <section class="hero">
+    <h1>Get a free API key</h1>
+    <p class="sub">Enter your email. We'll send a confirmation link;
+       clicking it reveals your key exactly once.</p>
+    <form method="POST" action="/signup">
+      <input class="hp" type="text" name="hp" tabindex="-1" autocomplete="off">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required autofocus
+             placeholder="you@example.com">
+      <div class="form-actions">
+        <button class="btn" type="submit">Send confirmation email</button>
+      </div>
+    </form>
+    <p class="form-hint">We email your key once and only use your
+       address to let you revoke or re-mint it. No marketing.</p>
+  </section>
+</div>
 """)
 
 
-_PAGE_SIGNUP_SENT = _wrap("Check your email — geo-mcp", """
-  <h1>Check your email</h1>
-  <p>If that address is valid, a confirmation link is on its way.
-     It expires in 24 hours.</p>
-  <p>Didn't get it? Check your spam folder, then <a href="/signup">try again</a>.</p>
+_PAGE_SIGNUP_SENT = _shell("Check your email — geo-mcp", """
+<div class="container-narrow">
+  <section class="hero">
+    <h1>Check your email</h1>
+    <p class="sub">If that address is valid, a confirmation link is on
+       its way. It expires in 24 hours.</p>
+    <p>Didn't get it? Check your spam folder, then
+       <a href="/signup">try again</a>.</p>
+  </section>
+</div>
 """)
 
 
@@ -215,32 +638,45 @@ def _page_signup_success(email: str, api_key: str) -> str:
     base = _os.getenv("GEO_MCP_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
     mcp_url = f"{base}/mcp"
     body = f"""
-  <h1>You're in</h1>
-  <p class="sub">Account: <code>{html.escape(email)}</code></p>
-  <div class="notice">
-    <strong>Save this key now.</strong> It's shown exactly once — we only
-    store its hash. If you lose it, sign up again to mint a new one.
-  </div>
-  <p class="key"><code>{html.escape(api_key)}</code></p>
-  <h2>Use it</h2>
-  <p>Add this to your MCP client config (example for Claude Code
-     <code>~/.claude/mcp_servers.json</code>):</p>
-  <pre>{{
+<div class="container-narrow">
+  <section class="hero">
+    <h1>You're in</h1>
+    <p class="sub">Account: <code>{html.escape(email)}</code></p>
+    <div class="notice">
+      <strong>Save this key now.</strong> It's shown exactly once — we only
+      store its hash. If you lose it, sign up again and we'll mint a new one.
+    </div>
+    <div class="key-wrap">
+      <div class="key-box" id="api-key">{html.escape(api_key)}</div>
+      <button class="copy-btn" data-target="api-key" type="button">Copy</button>
+    </div>
+    <h2>Use it</h2>
+    <p>Add this to your MCP client config (example for Claude Code at
+       <code>~/.claude/mcp_servers.json</code>):</p>
+    <pre>{{
   "geo-mcp": {{
     "type": "http",
     "url": "{html.escape(mcp_url)}",
     "headers": {{ "Authorization": "Bearer {html.escape(api_key)}" }}
   }}
 }}</pre>
+    <p class="form-hint">Restart your MCP client for the new server to be
+       discovered. Claude Desktop usually needs a full quit + relaunch.</p>
+  </section>
+</div>
 """
-    return _wrap("Your geo-mcp API key", body)
+    return _shell("Your geo-mcp API key", body, include_copy_js=True)
 
 
 def _page_error(message: str) -> str:
-    return _wrap("geo-mcp", f"""
-  <h1>Hmm.</h1>
-  <p>{html.escape(message)}</p>
-  <p><a href="/signup">Back to signup</a></p>
+    return _shell("Something went wrong — geo-mcp", f"""
+<div class="container-narrow">
+  <section class="hero">
+    <h1>Hmm.</h1>
+    <p class="sub">{html.escape(message)}</p>
+    <p><a class="btn btn-ghost" href="/signup">Back to signup</a></p>
+  </section>
+</div>
 """)
 
 
