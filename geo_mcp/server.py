@@ -137,49 +137,59 @@ def build_app() -> FastMCP:
 # Jinja2 + a real asset tree in.
 # ---------------------------------------------------------------------------
 
-# Simplified British Isles SVG — evocative, not cartographically accurate.
-# Two paths: GB (main island) + Ireland (with NI). viewBox 100x130.
+# Stylised fantasy-map landmass + offshore islands, outline-only.
+# Deliberately not any real-world coastline; just an evocative silhouette.
+# vector-effect="non-scaling-stroke" keeps the stroke weight visually
+# consistent whether the SVG renders at 22px (header) or 420px (hero).
 _UK_SVG = """\
-<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-  <path fill="currentColor" d="
-    M 55 4
-    C 59 8 62 14 63 22
-    C 64 28 61 33 58 36
-    C 62 38 65 43 64 48
-    C 72 50 76 54 76 60
-    C 76 66 72 71 68 72
-    L 72 82
-    L 70 92
-    L 64 96
-    L 64 104
-    L 58 110
-    L 52 112
-    L 47 108
-    L 45 100
-    L 40 102
-    L 35 98
-    L 37 90
-    L 32 86
-    L 28 78
-    L 32 72
-    L 38 70
-    L 36 64
-    L 40 56
-    L 46 50
-    L 42 42
-    L 44 32
-    L 48 22
-    L 50 10
+<svg viewBox="0 0 100 130" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"
+     fill="none" stroke="currentColor" stroke-width="2"
+     stroke-linejoin="round" stroke-linecap="round"
+     vector-effect="non-scaling-stroke">
+  <path vector-effect="non-scaling-stroke" d="
+    M 62 6
+    L 57 16
+    L 64 22
+    C 60 30, 50 30, 42 24
+    L 34 30
+    C 24 32, 18 44, 28 50
+    L 22 58
+    C 16 70, 24 80, 32 82
+    L 26 94
+    C 34 100, 42 98, 48 102
+    L 44 114
+    L 54 112
+    L 60 106
+    L 68 108
+    C 80 104, 88 94, 84 82
+    L 92 72
+    C 96 62, 90 50, 82 44
+    L 88 32
+    L 78 30
+    L 74 22
+    L 68 18
     Z
   "/>
-  <path fill="currentColor" d="
-    M 14 66
-    L 20 60
-    L 26 62
-    L 28 70
-    L 25 78
-    L 18 80
-    L 12 74
+  <path vector-effect="non-scaling-stroke" d="
+    M 94 68
+    L 97 65
+    L 99 69
+    L 96 72
+    Z
+  "/>
+  <path vector-effect="non-scaling-stroke" d="
+    M 50 120
+    L 54 118
+    L 57 121
+    L 55 124
+    L 51 123
+    Z
+  "/>
+  <path vector-effect="non-scaling-stroke" d="
+    M 30 106
+    L 33 105
+    L 34 108
+    L 31 109
     Z
   "/>
 </svg>
@@ -282,14 +292,17 @@ _CSS = """\
   }
   .hero-bg {
     position: absolute;
-    right: -4rem;
+    right: -3rem;
     top: -1rem;
     bottom: 0;
-    opacity: 0.06;
+    opacity: 0.22;
     pointer-events: none;
-    color: var(--ink);
+    color: var(--ink-muted);
   }
-  .hero-bg svg { width: 420px; height: auto; }
+  .hero-bg svg { width: 440px; height: auto; }
+  @media (prefers-color-scheme: dark) {
+    .hero-bg { opacity: 0.3; }
+  }
   .hero h1 {
     font-size: clamp(2.1rem, 5vw, 3.25rem);
     line-height: 1.1;
