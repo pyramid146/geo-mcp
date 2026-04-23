@@ -115,6 +115,19 @@ Add to `~/.claude/mcp_servers.json`:
 }
 ```
 
+### Codex CLI (OpenAI's `codex` command-line agent)
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.geo-mcp]
+type = "http"
+url = "https://geomcp.dev/mcp"
+headers = { Authorization = "Bearer gmcp_live_..." }
+```
+
+Codex speaks streamable-HTTP MCP natively, so no `mcp-remote` bridge is needed. If the key names above don't take effect, your Codex version may name the schema slightly differently (`transport` vs `type`, etc.) — check `codex --help` or the Codex docs for the exact `mcp_servers` schema for your release.
+
 ### Other MCP clients
 
 Most MCP clients that speak streamable-HTTP accept the same three fields: `type: "http"`, `url`, and a Bearer header. Check your client's docs for where its config lives.
