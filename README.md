@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 27 tools covering flood risk, property records, heritage, environmental designations, greenspace, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 28 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -171,6 +171,7 @@ Free tier, rate-limited, no card required.
 | `heritage_nearby_uk` | lat, lon, radius_m | listed buildings, monuments, parks, battlefields, wrecks, WHS within radius |
 | `designated_sites_nearby_uk` | lat, lon, radius_m, types? | Natural England SSSI / SAC / SPA / Ramsar / NNR / LNR / AONB / Ancient Woodland within radius |
 | `green_space_nearby_uk` | lat, lon, radius_m, functions? | OS Open Greenspace — parks, play spaces, allotments, cemeteries, sports facilities |
+| `schools_nearby_uk` | lat, lon, radius_m, phase? | DfE GIAS schools — phase, Ofsted rating, pupil count, postcode |
 
 ### Ground / geotech
 | Tool | Input | Returns |
@@ -213,6 +214,7 @@ All datasets used in the default build are **Open Government Licence v3.0** — 
 | Coal Authority / Mining Remediation Authority | Planning & Policy Constraints WMS (live) |
 | HM Land Registry | Price Paid Data |
 | MHCLG | EPC Register |
+| DfE | GIAS (Get Information About Schools) |
 | Police forces (via data.police.uk) | Street-level crime incidents |
 
 The server itself is MIT-licensed — see [LICENSE](./LICENSE).
