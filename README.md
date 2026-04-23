@@ -46,17 +46,49 @@ Every response carries its data source and licence attribution, so an agent surf
 ## Get started
 
 1. Visit **`https://geomcp.dev/signup`** and enter your email.
-2. Click the confirmation link — your API key is displayed once.
-3. Paste it into your MCP client config. Example for Claude Code at `~/.claude/mcp_servers.json`:
-   ```json
-   {
-     "geo-mcp": {
-       "type": "http",
-       "url": "https://geomcp.dev/mcp",
-       "headers": { "Authorization": "Bearer gmcp_live_..." }
-     }
-   }
-   ```
+2. Click the confirmation link — your API key is displayed once. Save it somewhere safe.
+3. Paste it into your MCP client's config (pick whichever matches your setup):
+
+### Claude Desktop (Windows / macOS)
+
+Open the config file via **File → Settings → Developer → Edit Config**. It'll open `claude_desktop_config.json` in your default editor (if you'd rather navigate to it directly):
+
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+Add (or merge into) the `mcpServers` block:
+
+```json
+{
+  "mcpServers": {
+    "geo-mcp": {
+      "type": "http",
+      "url": "https://geomcp.dev/mcp",
+      "headers": { "Authorization": "Bearer gmcp_live_..." }
+    }
+  }
+}
+```
+
+Restart Claude Desktop. The geo-mcp tools should appear in the tool picker.
+
+### Claude Code (CLI)
+
+Add to `~/.claude/mcp_servers.json`:
+
+```json
+{
+  "geo-mcp": {
+    "type": "http",
+    "url": "https://geomcp.dev/mcp",
+    "headers": { "Authorization": "Bearer gmcp_live_..." }
+  }
+}
+```
+
+### Other MCP clients
+
+Most MCP clients that speak streamable-HTTP accept the same three fields: `type: "http"`, `url`, and a Bearer header. Check your client's docs for where its config lives.
 
 Free tier, rate-limited, no card required.
 
