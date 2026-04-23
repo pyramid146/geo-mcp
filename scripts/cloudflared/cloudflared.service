@@ -4,6 +4,10 @@
 Description=cloudflared tunnel for geo-mcp
 After=network-online.target
 Wants=network-online.target
+# StartLimitIntervalSec lives in [Unit] (not [Service]) to stay
+# compatible with older systemd. Retry indefinitely on boot if
+# Cloudflare's edge is briefly unreachable.
+StartLimitIntervalSec=0
 
 [Service]
 Type=notify
@@ -13,8 +17,6 @@ User=CHANGEME
 ExecStart=/home/CHANGEME/.local/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
 Restart=on-failure
 RestartSec=5s
-# Retry indefinitely on boot if Cloudflare's edge is briefly unreachable.
-StartLimitIntervalSec=0
 
 [Install]
 WantedBy=multi-user.target
