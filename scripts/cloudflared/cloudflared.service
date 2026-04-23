@@ -1,0 +1,20 @@
+# Sample unit. Edit User= and the cloudflared binary path to match your
+# host before installing. See scripts/cloudflared/README.md.
+[Unit]
+Description=cloudflared tunnel for geo-mcp
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=CHANGEME
+# Point at wherever cloudflared lives on your host — e.g. ~/.local/bin if
+# installed per-user, or /usr/local/bin if installed system-wide.
+ExecStart=/home/CHANGEME/.local/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
+Restart=on-failure
+RestartSec=5s
+# Retry indefinitely on boot if Cloudflare's edge is briefly unreachable.
+StartLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

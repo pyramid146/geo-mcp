@@ -1,0 +1,26 @@
+# cloudflared tunnel config for geo-mcp.
+# Copy to /etc/cloudflared/config.yml once the tunnel is created.
+#
+# Placeholder <TUNNEL_ID> must be replaced with the UUID printed by
+#   cloudflared tunnel create geo-mcp
+# The credentials-file path must match where `tunnel create` wrote the
+# JSON (default is ~/.cloudflared/<TUNNEL_ID>.json — move/copy to
+# /etc/cloudflared/ before running as a system service).
+
+tunnel: <TUNNEL_ID>
+credentials-file: /etc/cloudflared/<TUNNEL_ID>.json
+
+# All traffic for geomcp.dev → local geo-mcp HTTP server on 127.0.0.1:8000.
+# The final catch-all http_status:404 is required by cloudflared — any
+# request not matching an explicit hostname rule 404s rather than leaking
+# to the default http://localhost behaviour.
+ingress:
+  - hostname: geomcp.dev
+    service: http://127.0.0.1:8000
+  - service: http_status:404
+
+# Fail fast if the origin is unreachable — prevents cloudflared from
+# holding onto stale connections when the Python server restarts.
+originRequest:
+  connectTimeout: 10s
+  noHappyEyeballs: true
