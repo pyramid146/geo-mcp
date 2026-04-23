@@ -45,14 +45,14 @@ Every response carries its data source and licence attribution, so an agent surf
 
 ## Get started
 
-1. Visit **`https://<hosted-instance>/signup`** and enter your email.
+1. Visit **`https://geomcp.dev/signup`** and enter your email.
 2. Click the confirmation link — your API key is displayed once.
 3. Paste it into your MCP client config. Example for Claude Code at `~/.claude/mcp_servers.json`:
    ```json
    {
      "geo-mcp": {
        "type": "http",
-       "url": "https://<hosted-instance>/mcp",
+       "url": "https://geomcp.dev/mcp",
        "headers": { "Authorization": "Bearer gmcp_live_..." }
      }
    }
