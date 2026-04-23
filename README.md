@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 24 tools covering flood risk, property records, heritage, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 25 tools covering flood risk, property records, heritage, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -163,6 +163,7 @@ Free tier, rate-limited, no card required.
 | Tool | Input | Returns |
 |---|---|---|
 | `property_lookup_uk` | UPRN | OS Open UPRN coords (WGS84 + OSGB) + full admin + geology for the point |
+| `building_footprint_uk` | UPRN | OS Open Zoomstack building polygon (GeoJSON) + area + OSGB bbox for a UPRN |
 | `property_report_uk` | UPRN | one-call composite: lookup + EPC + comparable sales + flood + listed + heritage + elevation, with headline + narrative |
 | `recent_sales_uk` | postcode, years | HMLR Price Paid Data — stats + up to 50 recent sales |
 | `energy_performance_uk` | postcode or UPRN | EPC certificate(s); includes `flood_re_year_signal` derived from age band |
@@ -202,7 +203,7 @@ All datasets used in the default build are **Open Government Licence v3.0** — 
 | Source | Dataset |
 |---|---|
 | ONS | ONSPD (postcodes) |
-| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50, Open UPRN |
+| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50, Open UPRN, Open Zoomstack |
 | Environment Agency | Flood Zones, RoFRS, RoFSW (WMS), Recorded Flood Outlines |
 | Historic England | National Heritage List |
 | British Geological Survey | Geology 625k, GeoIndex boreholes |

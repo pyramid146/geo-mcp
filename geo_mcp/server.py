@@ -13,6 +13,7 @@ from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.middleware import AuthMiddleware, UsageLoggingMiddleware
 from geo_mcp.signup import start_signup, verify_signup
 from geo_mcp.tools.boreholes import boreholes_nearby_uk
+from geo_mcp.tools.building import building_footprint_uk
 from geo_mcp.tools.coal_mining import coal_mining_risk_uk
 from geo_mcp.tools.crime import crime_nearby_uk
 from geo_mcp.tools.distance import distance_between
@@ -65,6 +66,7 @@ def build_app() -> FastMCP:
     app.tool(property_report_uk)
     app.tool(crime_nearby_uk)
     app.tool(coal_mining_risk_uk)
+    app.tool(building_footprint_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
@@ -594,7 +596,7 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
   <section class="hero">
     <div class="hero-bg">""" + _MARK_SVG + """</div>
     <h1>UK geospatial data, made for LLM agents.</h1>
-    <p class="sub">24 tools covering flood risk, property records, heritage,
+    <p class="sub">25 tools covering flood risk, property records, heritage,
       geology, crime, coal mining, elevation, and geocoding — all built
       on UK open-data sources (ONS, Ordnance Survey, Environment Agency,
       Historic England, BGS, HMLR, MHCLG, police.uk, Coal Authority).
@@ -622,6 +624,7 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
       <h3>Property</h3>
       <ul>
         <li>Give me a full property report for UPRN 10033544614.</li>
+        <li>Draw the building footprint polygon for this UPRN.</li>
         <li>What have flats sold for in SW1A 1AA in the last 5 years?</li>
         <li>What's the EPC rating and construction age of this property?</li>
       </ul>
