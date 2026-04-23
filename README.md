@@ -8,12 +8,12 @@ Without this, an agent answering a UK location question falls back to whatever h
 
 ## What you can ask
 
-Once connected, an agent can answer questions it otherwise can't. Some examples:
+Once connected, an agent can answer questions it otherwise can't:
 
 **Flood and water**
 - "What's the flood risk at 12 Mill Lane, Tewkesbury GL20 5BY?"
 - "Has the area around CB3 9AX ever flooded, and how recently?"
-- "Is this postcode in a Flood Zone 2 or 3 for planning purposes?"
+- "Is this postcode in Flood Zone 2 or 3 for planning purposes?"
 - "How does surface water risk differ from river risk at this point?"
 
 **Property**
@@ -39,7 +39,7 @@ Once connected, an agent can answer questions it otherwise can't. Some examples:
 - "How far is it between these two UK points, as the crow flies and projected?"
 - "Convert these British National Grid coordinates to WGS84"
 
-Every response carries its data source and licence attribution, so an agent surfacing answers to users can credit them correctly.
+Every response carries its data source and licence attribution, so an agent surfacing answers can credit them correctly.
 
 ---
 
@@ -124,60 +124,20 @@ The server itself is MIT-licensed — see [LICENSE](./LICENSE).
 
 ---
 
-## Design notes
+## Why the tools return what they do
 
 - **Decisions, not data.** "Flood Zone 3, rivers" beats a 500-row polygon dump. If the caller has to post-process the response, the tool is designed wrong.
-- **Docstrings are product copy.** They're what the LLM reads to decide whether to call the tool.
-- **Errors come back as `{"error": ..., "message": ...}`**, never raised to the client.
-- **Auth is in-process.** `AuthMiddleware` is authoritative for API-key validation. Transport layers (Cloudflare, reverse proxy) are TLS/DDoS only.
-- **Every response carries its attribution.** OGLv3 data must be credited; the tools do it automatically.
+- **Every response carries its attribution.** OGLv3 datasets require credit; the tools do it automatically so a user-facing surface (a report, a chat reply) can display the right line.
+- **Coverage caveats are inline.** "England only", "scale 1:625k, not suitable for foundation decisions" — embedded in the response, not buried in docs a user will never read.
 
 ---
 
-## Development
+## Contributing / running your own instance
 
-Running locally is supported but non-trivial — the tools need ~60 GB of pre-ingested UK open data to work. The hosted instance exists precisely so you don't have to do this.
-
-**Prerequisites:** Docker + docker-compose, Python 3.12, `gdal-bin`, `postgresql-client-16`, ~60 GB free disk.
-
-```bash
-git clone <repo> && cd geo-mcp
-cp .env.example .env     # fill in passwords
-docker compose up -d postgis
-./scripts/migrate.sh
-
-# Load the datasets you need — each has download.sh + load.sh in ingest/<name>/
-./ingest/onspd/download.sh && ./ingest/onspd/load.sh
-# …etc
-
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e '.[dev]'
-pytest -q               # ~50 s, integrates against real PostGIS
-python -m geo_mcp       # serves on 127.0.0.1:8000
-```
-
-Hit `GET /health` for liveness + readiness (no auth). `GET /` for the landing page, `GET /signup` to mint yourself a key without going through the admin CLI.
-
-### Environment
-
-| Env var | Default | Purpose |
-|---|---|---|
-| `POSTGRES_DB` | required | Postgres database name |
-| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `5432` | Postgres address |
-| `DB_USER` / `MCP_READONLY_PASSWORD` | `mcp_readonly` / required | App role (readonly on geospatial data, read/write on `meta`) |
-| `MCP_HTTP_HOST` / `MCP_HTTP_PORT` | `127.0.0.1` / `8000` | Bind address |
-| `GEO_MCP_PUBLIC_BASE_URL` | `http://127.0.0.1:8000` | Base URL used in signup emails |
-| `GEO_MCP_FROM_EMAIL` | `onboarding@resend.dev` | `From:` address on signup emails |
-| `RESEND_API_KEY` | unset | Resend API key — if unset, verification URLs are logged instead of emailed |
-
-Ingest and migration scripts additionally need `MCP_ADMIN_PASSWORD` + `MCP_INGEST_PASSWORD` — see `.env.example`.
-
-### Backups + restore drill
-
-`scripts/systemd/geo-mcp-backup.{service,timer}` run a nightly `pg_dump` of the `meta` schema to `/data/backups`, and optionally rclone-sync it to an S3-compatible offsite (Cloudflare R2, Backblaze B2) if an `r2` remote is configured. `scripts/restore-drill.sh` restores the latest dump into a scratch DB and asserts row counts.
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for ingest scripts, environment variables, test suite, and ops notes. Not recommended for casual use — the data alone takes ~60 GB after ingest.
 
 ---
 
 ## Licence
 
-MIT for the code. See [LICENSE](./LICENSE). Every tool response carries the specific attribution string for the data it used — treat those as non-optional.
+MIT for the code. See [LICENSE](./LICENSE). Data attribution lines ship with every tool response and are non-optional.
