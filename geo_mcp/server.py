@@ -16,6 +16,7 @@ from geo_mcp.tools.boreholes import boreholes_nearby_uk
 from geo_mcp.tools.building import building_footprint_uk
 from geo_mcp.tools.coal_mining import coal_mining_risk_uk
 from geo_mcp.tools.crime import crime_nearby_uk
+from geo_mcp.tools.designated_sites import designated_sites_nearby_uk
 from geo_mcp.tools.distance import distance_between
 from geo_mcp.tools.elevation import elevation
 from geo_mcp.tools.elevation_summary import elevation_summary_uk
@@ -67,6 +68,7 @@ def build_app() -> FastMCP:
     app.tool(crime_nearby_uk)
     app.tool(coal_mining_risk_uk)
     app.tool(building_footprint_uk)
+    app.tool(designated_sites_nearby_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
@@ -596,11 +598,12 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
   <section class="hero">
     <div class="hero-bg">""" + _MARK_SVG + """</div>
     <h1>UK geospatial data, made for LLM agents.</h1>
-    <p class="sub">25 tools covering flood risk, property records, heritage,
-      geology, crime, coal mining, elevation, and geocoding — all built
-      on UK open-data sources (ONS, Ordnance Survey, Environment Agency,
-      Historic England, BGS, HMLR, MHCLG, police.uk, Coal Authority).
-      Returns decisions an LLM can act on, not raw polygons.</p>
+    <p class="sub">26 tools covering flood risk, property records, heritage,
+      environmental designations, geology, crime, coal mining, elevation,
+      and geocoding — all built on UK open-data sources (ONS, Ordnance
+      Survey, Environment Agency, Historic England, Natural England, BGS,
+      HMLR, MHCLG, police.uk, Coal Authority). Returns decisions an LLM
+      can act on, not raw polygons.</p>
     <div class="hero-ctas">
       <a class="btn" href="/signup">Get a free API key</a>
       <a class="btn btn-ghost" href="/status">Service status</a>
@@ -634,6 +637,7 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
       <ul>
         <li>Is 10 Downing Street a listed building?</li>
         <li>Scheduled monuments within 500 m of this coordinate?</li>
+        <li>Is this property inside an SSSI, AONB, or Ancient Woodland?</li>
         <li>Can a new dwelling be built here under NPPF?</li>
       </ul>
     </div>
