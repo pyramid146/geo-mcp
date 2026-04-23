@@ -120,6 +120,8 @@ claude mcp list           # should list geo-mcp
 claude mcp get geo-mcp    # does an actual health-check ping — errors here mean the key or URL is wrong
 ```
 
+**Restart your Claude CLI session** after adding. Any `claude` process already running won't see the new server until you exit and re-launch — the MCP server list is loaded at startup.
+
 **Note on secrets**: the Bearer token ends up stored in plaintext inside Claude's config file on disk. That's the same cleartext tradeoff every tool-config-with-an-API-key has. If you want the token out of config files entirely, the usual pattern is to wrap the server as a local stdio proxy that reads the token from an environment variable and forwards to the HTTP endpoint — out of scope for this README, but a standard MCP pattern. Otherwise just make sure the config file is only readable by you (`chmod 600`) and don't commit it anywhere.
 
 ### Codex CLI (OpenAI's `codex` command-line agent)
