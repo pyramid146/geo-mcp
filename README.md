@@ -103,17 +103,17 @@ If Claude Desktop shows "Some MCP servers could not be loaded," open the MCP log
 
 ### Claude Code (CLI)
 
-Add to `~/.claude/mcp_servers.json`:
+Register the server with the built-in `claude mcp add` command:
 
-```json
-{
-  "geo-mcp": {
-    "type": "http",
-    "url": "https://geomcp.dev/mcp",
-    "headers": { "Authorization": "Bearer gmcp_live_..." }
-  }
-}
+```bash
+claude mcp add --transport http --scope user geo-mcp \
+  https://geomcp.dev/mcp \
+  --header "Authorization: Bearer gmcp_live_..."
 ```
+
+`--scope user` makes it available in every project you run `claude` from (as opposed to just the current repo). This writes the config to the right file for your platform and avoids hand-editing JSON, which has the habit of going subtly wrong on WSL (credential-store side effects etc.).
+
+**Note on secrets**: the Bearer token ends up stored in plaintext inside Claude's config file on disk. That's the same cleartext tradeoff every tool-config-with-an-API-key has. If you want the token out of config files entirely, the usual pattern is to wrap the server as a local stdio proxy that reads the token from an environment variable and forwards to the HTTP endpoint — out of scope for this README, but a standard MCP pattern. Otherwise just make sure the config file is only readable by you (`chmod 600`) and don't commit it anywhere.
 
 ### Codex CLI (OpenAI's `codex` command-line agent)
 
