@@ -13,6 +13,7 @@ from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.middleware import AuthMiddleware, UsageLoggingMiddleware
 from geo_mcp.signup import start_signup, verify_signup
 from geo_mcp.tools.boreholes import boreholes_nearby_uk
+from geo_mcp.tools.coal_mining import coal_mining_risk_uk
 from geo_mcp.tools.crime import crime_nearby_uk
 from geo_mcp.tools.distance import distance_between
 from geo_mcp.tools.elevation import elevation
@@ -63,6 +64,7 @@ def build_app() -> FastMCP:
     app.tool(property_lookup_uk)
     app.tool(property_report_uk)
     app.tool(crime_nearby_uk)
+    app.tool(coal_mining_risk_uk)
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
@@ -592,11 +594,11 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
   <section class="hero">
     <div class="hero-bg">""" + _MARK_SVG + """</div>
     <h1>UK geospatial data, made for LLM agents.</h1>
-    <p class="sub">23 tools covering flood risk, property records, heritage,
-      geology, crime, elevation, and geocoding — all built on UK open-data
-      sources (ONS, Ordnance Survey, Environment Agency, Historic England,
-      BGS, HMLR, MHCLG, police.uk). Returns decisions an LLM can act on,
-      not raw polygons.</p>
+    <p class="sub">24 tools covering flood risk, property records, heritage,
+      geology, crime, coal mining, elevation, and geocoding — all built
+      on UK open-data sources (ONS, Ordnance Survey, Environment Agency,
+      Historic England, BGS, HMLR, MHCLG, police.uk, Coal Authority).
+      Returns decisions an LLM can act on, not raw polygons.</p>
     <div class="hero-ctas">
       <a class="btn" href="/signup">Get a free API key</a>
       <a class="btn btn-ghost" href="/status">Service status</a>
@@ -637,6 +639,7 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
       <ul>
         <li>What's the bedrock at 51.5014, -0.1419?</li>
         <li>Any BGS boreholes within 1 km of this point?</li>
+        <li>Is this property in a Coal Authority high-risk area?</li>
         <li>What's the elevation profile for this postcode area?</li>
       </ul>
     </div>
