@@ -292,16 +292,22 @@ _CSS = """\
   }
   .hero-bg {
     position: absolute;
-    right: -3rem;
-    top: -1rem;
-    bottom: 0;
+    right: 1rem;
+    top: 1rem;
     opacity: 0.22;
     pointer-events: none;
     color: var(--ink-muted);
   }
-  .hero-bg svg { width: 440px; height: auto; }
+  .hero-bg svg {
+    width: clamp(180px, 30vw, 340px);
+    height: auto;
+    display: block;
+  }
   @media (prefers-color-scheme: dark) {
     .hero-bg { opacity: 0.3; }
+  }
+  @media (max-width: 780px) {
+    .hero-bg { display: none; }
   }
   .hero h1 {
     font-size: clamp(2.1rem, 5vw, 3.25rem);
