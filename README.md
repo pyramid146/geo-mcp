@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 26 tools covering flood risk, property records, heritage, environmental designations, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 27 tools covering flood risk, property records, heritage, environmental designations, greenspace, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -170,6 +170,7 @@ Free tier, rate-limited, no card required.
 | `is_listed_building_uk` | lat, lon, tolerance_m | exact-point check against Historic England's NHLE |
 | `heritage_nearby_uk` | lat, lon, radius_m | listed buildings, monuments, parks, battlefields, wrecks, WHS within radius |
 | `designated_sites_nearby_uk` | lat, lon, radius_m, types? | Natural England SSSI / SAC / SPA / Ramsar / NNR / LNR / AONB / Ancient Woodland within radius |
+| `green_space_nearby_uk` | lat, lon, radius_m, functions? | OS Open Greenspace — parks, play spaces, allotments, cemeteries, sports facilities |
 
 ### Ground / geotech
 | Tool | Input | Returns |
@@ -204,7 +205,7 @@ All datasets used in the default build are **Open Government Licence v3.0** — 
 | Source | Dataset |
 |---|---|
 | ONS | ONSPD (postcodes) |
-| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50, Open UPRN, Open Zoomstack |
+| Ordnance Survey | Boundary-Line, OpenNames, Terrain 50, Open UPRN, Open Zoomstack, Open Greenspace |
 | Environment Agency | Flood Zones, RoFRS, RoFSW (WMS), Recorded Flood Outlines |
 | Historic England | National Heritage List |
 | Natural England | SSSI, SAC, SPA, Ramsar, NNR, LNR, AONB, Ancient Woodland |
