@@ -1,6 +1,6 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 28 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. 29 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, deprivation, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
@@ -172,6 +172,7 @@ Free tier, rate-limited, no card required.
 | `designated_sites_nearby_uk` | lat, lon, radius_m, types? | Natural England SSSI / SAC / SPA / Ramsar / NNR / LNR / AONB / Ancient Woodland within radius |
 | `green_space_nearby_uk` | lat, lon, radius_m, functions? | OS Open Greenspace — parks, play spaces, allotments, cemeteries, sports facilities |
 | `schools_nearby_uk` | lat, lon, radius_m, phase? | DfE GIAS schools — phase, Ofsted rating, pupil count, postcode |
+| `deprivation_uk` | postcode or lat/lon | IMD 2019 decile + rank for the resolved LSOA (England) |
 
 ### Ground / geotech
 | Tool | Input | Returns |
