@@ -113,6 +113,13 @@ claude mcp add --transport http --scope user geo-mcp \
 
 `--scope user` makes it available in every project you run `claude` from (as opposed to just the current repo). This writes the config to the right file for your platform and avoids hand-editing JSON, which has the habit of going subtly wrong on WSL (credential-store side effects etc.).
 
+Verify:
+
+```bash
+claude mcp list           # should list geo-mcp
+claude mcp get geo-mcp    # does an actual health-check ping — errors here mean the key or URL is wrong
+```
+
 **Note on secrets**: the Bearer token ends up stored in plaintext inside Claude's config file on disk. That's the same cleartext tradeoff every tool-config-with-an-API-key has. If you want the token out of config files entirely, the usual pattern is to wrap the server as a local stdio proxy that reads the token from an environment variable and forwards to the HTTP endpoint — out of scope for this README, but a standard MCP pattern. Otherwise just make sure the config file is only readable by you (`chmod 600`) and don't commit it anywhere.
 
 ### Codex CLI (OpenAI's `codex` command-line agent)
