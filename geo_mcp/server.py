@@ -169,7 +169,7 @@ def _wrap(title: str, body: str) -> str:
 
 _PAGE_ROOT = _wrap("geo-mcp", """
   <h1>geo-mcp</h1>
-  <p class="sub">UK-specialist geospatial MCP server — 20 tools for flood risk,
+  <p class="sub">UK-specialist geospatial MCP server — 21 tools for flood risk,
     property history, listed buildings, elevation, geocoding and more.</p>
   <p><a href="/signup">Get a free API key</a> ·
      <a href="https://github.com/pyramid146/geo-mcp">Source on GitHub</a> ·
@@ -199,6 +199,9 @@ _PAGE_SIGNUP_SENT = _wrap("Check your email — geo-mcp", """
 
 
 def _page_signup_success(email: str, api_key: str) -> str:
+    import os as _os
+    base = _os.getenv("GEO_MCP_PUBLIC_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    mcp_url = f"{base}/mcp"
     body = f"""
   <h1>You're in</h1>
   <p class="sub">Account: <code>{html.escape(email)}</code></p>
@@ -213,11 +216,10 @@ def _page_signup_success(email: str, api_key: str) -> str:
   <pre>{{
   "geo-mcp": {{
     "type": "http",
-    "url": "https://geo-mcp.example/mcp",
+    "url": "{html.escape(mcp_url)}",
     "headers": {{ "Authorization": "Bearer {html.escape(api_key)}" }}
   }}
 }}</pre>
-  <p>Replace <code>https://geo-mcp.example</code> with the hosted instance URL.</p>
 """
     return _wrap("Your geo-mcp API key", body)
 

@@ -178,7 +178,15 @@ async def _send_verification_email(email: str, raw_token: str) -> None:
                 headers={"Authorization": f"Bearer {api_key}"},
                 json=payload,
             )
-            r.raise_for_status()
+            if r.status_code >= 400:
+                # Resend's 4xx body usually carries the real reason (e.g.
+                # invalid sender domain, malformed recipient). Log it so
+                # the next engineer doesn't have to re-instrument.
+                log.error(
+                    "resend rejected send email=%s status=%s body=%s",
+                    email, r.status_code, r.text[:500],
+                )
+                return
     except Exception:
         # An email delivery failure shouldn't 500 the signup endpoint —
         # the pending row is already stored, we can re-send on request.
