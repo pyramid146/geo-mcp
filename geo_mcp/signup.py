@@ -59,10 +59,17 @@ class SignupStarted:
 async def start_signup(email: str, source_ip: str | None = None) -> SignupStarted:
     """Create a pending signup + send the verification email.
 
-    The plaintext token is emailed and also returned in the email-send
-    payload, but NOT returned to the HTTP caller — the caller submitted
-    the email, not the owner of the inbox. The inbox owner is the one
-    who clicks the link.
+    Deduplication: at most one active (unverified, unexpired) token per
+    email at a time — enforced by a partial unique index in the
+    ``meta.pending_signups`` table. Repeated POST /signup requests for
+    the same email are silently deduped (no second email sent), so an
+    attacker rotating IPs can't turn us into an email bomb against a
+    victim. The caller still sees the "check your email" page, which
+    also avoids leaking whether the address is already registered.
+
+    The plaintext token is emailed but NOT returned to the HTTP caller —
+    the caller submitted the email, not the owner of the inbox. The
+    inbox owner is the one who clicks the link.
     """
     email = email.strip().lower()
     if "@" not in email or len(email) > 254:
@@ -73,14 +80,36 @@ async def start_signup(email: str, source_ip: str | None = None) -> SignupStarte
     source_ip = _valid_ip_or_none(source_ip)
 
     pool = await get_pool()
-    async with pool.acquire() as conn:
+    async with pool.acquire() as conn, conn.transaction():
+        # Clear any verified or expired rows for this email so the
+        # partial unique index (on `email WHERE verified_at IS NULL`)
+        # doesn't block a legitimate re-signup.
         await conn.execute(
             """
-            INSERT INTO meta.pending_signups (email, token_hash, expires_at, source_ip)
+            DELETE FROM meta.pending_signups
+             WHERE email = $1
+               AND (verified_at IS NOT NULL OR expires_at <= now())
+            """,
+            email,
+        )
+        inserted = await conn.fetchval(
+            """
+            INSERT INTO meta.pending_signups
+                   (email, token_hash, expires_at, source_ip)
             VALUES ($1, $2, $3, $4::inet)
+            ON CONFLICT (email) WHERE verified_at IS NULL
+            DO NOTHING
+            RETURNING id
             """,
             email, _hash_token(raw_token), expires_at, source_ip,
         )
+
+    if inserted is None:
+        # There's already an active token for this email. Silently skip
+        # sending a duplicate — the legitimate user can still use the
+        # link from the first email.
+        log.info("signup deduped (active token already exists) email=%s", email)
+        return SignupStarted(email=email, expires_at=expires_at)
 
     await _send_verification_email(email, raw_token)
     return SignupStarted(email=email, expires_at=expires_at)

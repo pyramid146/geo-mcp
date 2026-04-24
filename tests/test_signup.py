@@ -12,7 +12,7 @@ import pytest
 
 from geo_mcp import signup as signup_mod
 from geo_mcp.data_access.postgis import close_pool, get_pool
-from geo_mcp.signup import start_signup, verify_signup
+from geo_mcp.signup import start_signup, verify_signup  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
 
@@ -98,3 +98,42 @@ async def test_email_is_normalised_to_lowercase(capture_email):
     email = f"SignUP-{uuid.uuid4()}@Example.TEST"
     started = await start_signup(email)
     assert started.email == email.lower()
+
+
+async def test_duplicate_signup_within_window_skips_email(capture_email):
+    # Email-bomb defence: a second signup for the same email while an
+    # active token exists must not trigger a second email.
+    email = f"dedupe-{uuid.uuid4()}@example.test"
+    await start_signup(email)
+    first_token = capture_email.get("token")
+    assert first_token  # first send happened
+
+    # Clear capture so we can detect a second send (or absence).
+    capture_email.clear()
+
+    r = await start_signup(email)  # same email, immediately
+    assert r.email == email
+    # Second call should NOT have invoked _send_verification_email.
+    assert capture_email == {}
+
+
+async def test_duplicate_signup_after_expiry_sends_fresh_email(capture_email):
+    # Once a pending token expires, the same email should be allowed a
+    # fresh send (partial unique index only applies to unverified rows,
+    # and we clear expired rows explicitly before insert).
+    email = f"expiry-{uuid.uuid4()}@example.test"
+    await start_signup(email)
+    assert capture_email.get("token")
+
+    # Age the pending row so our "delete expired" path clears it.
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE meta.pending_signups SET expires_at = now() - interval '1 hour' WHERE email = $1",
+            email,
+        )
+
+    capture_email.clear()
+    await start_signup(email)
+    # New token should have been issued + emailed.
+    assert capture_email.get("token")
