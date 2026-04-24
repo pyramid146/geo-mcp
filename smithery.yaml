@@ -1,0 +1,34 @@
+# Smithery manifest for geo-mcp.
+#
+# This describes a REMOTE (hosted) MCP server — not something Smithery
+# runs on the user's behalf. Smithery's remote-server path:
+#
+#   1. User picks geo-mcp from the Smithery catalogue.
+#   2. Smithery prompts them for an API key (from configSchema below).
+#   3. Smithery hands the URL + Bearer header to the user's MCP client.
+#
+# If Smithery's schema evolves, cross-check against
+# https://smithery.ai/docs/build/project-config/smithery-yaml before
+# resubmitting — the canonical fields here are startCommand + configSchema.
+startCommand:
+  type: http
+  configSchema:
+    type: object
+    required:
+      - apiKey
+    properties:
+      apiKey:
+        type: string
+        title: API key
+        description: >
+          Your geo-mcp API key. Free tier available at
+          https://geomcp.dev/signup — one email → one key, no card.
+        format: password
+  commandFunction: |-
+    (config) => ({
+      type: "http",
+      url: "https://geomcp.dev/mcp",
+      headers: {
+        "Authorization": `Bearer ${config.apiKey}`
+      }
+    })
