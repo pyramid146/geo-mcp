@@ -5,6 +5,7 @@ import logging
 
 from fastmcp import FastMCP
 from starlette.middleware import Middleware as ASGIMiddleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse
 
@@ -965,11 +966,28 @@ def main() -> None:
     settings = load_settings()
     log.info("geo-mcp starting on http://%s:%d/mcp", settings.http_host, settings.http_port)
     app = build_app()
+    # CORS first (handles OPTIONS preflight before auth runs). Browsers
+    # are the only clients that preflight, and the MCP protocol has no
+    # cookie-or-credentials notion to protect, so allowing any origin is
+    # safe: auth is still enforced per-request via X-API-Key / Bearer.
+    # This matters for MCP hosting UIs (Smithery, Claude.ai playgrounds,
+    # etc.) that scan a server via the user's browser.
+    cors = ASGIMiddleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET", "POST", "OPTIONS", "DELETE"],
+        allow_headers=[
+            "authorization", "x-api-key", "content-type", "accept",
+            "mcp-session-id", "mcp-protocol-version",
+        ],
+        expose_headers=["mcp-session-id", "mcp-protocol-version"],
+        max_age=86400,
+    )
     app.run(
         transport="http",
         host=settings.http_host,
         port=settings.http_port,
-        middleware=[ASGIMiddleware(AuthMiddleware)],
+        middleware=[cors, ASGIMiddleware(AuthMiddleware)],
     )
 
 
