@@ -94,7 +94,10 @@ def build_app() -> FastMCP:
 
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
-        return HTMLResponse(_PAGE_ROOT)
+        # Live tool count keeps marketing copy in sync with what's
+        # actually registered — no more "page says 28, app has 33".
+        n = len(await app.list_tools())
+        return HTMLResponse(_page_root(n))
 
     @app.custom_route("/favicon.svg", methods=["GET"])
     async def favicon(_: Request) -> HTMLResponse:
@@ -631,12 +634,20 @@ def _wrap(title: str, body: str) -> str:
     return _shell(title, f'<div class="container-narrow"><div class="hero">{body}</div></div>')
 
 
-_PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
+def _page_root(tool_count: int) -> str:
+    """Landing page — templated with the live tool count.
+
+    Wrapped in a function (rather than a module-level constant) so the
+    "N tools" copy always matches what's actually registered. Avoids
+    the "marketing copy says 28, app has 33" drift we saw repeatedly
+    during development.
+    """
+    return _shell("geo-mcp — UK geospatial for LLM agents", """
 <div class="container">
   <section class="hero">
     <div class="hero-bg">""" + _MARK_SVG + """</div>
     <h1>UK geospatial data, made for LLM agents.</h1>
-    <p class="sub">28 tools covering flood risk, property records, heritage,
+    <p class="sub">""" + str(tool_count) + """ tools covering flood risk, property records, heritage,
       environmental designations, greenspace, schools, geology, crime,
       coal mining, elevation, and geocoding — all built on UK open-data
       sources (ONS, Ordnance Survey, Environment Agency, Historic England,

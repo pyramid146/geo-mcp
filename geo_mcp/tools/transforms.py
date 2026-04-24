@@ -72,6 +72,10 @@ async def transform_coords(
         "datum": datum,
         "from_epsg": from_epsg,
         "to_epsg": to_epsg,
+        # No dataset attribution — this is a pure projection operation
+        # via pyproj. Explicit so every tool response follows the same
+        # attribution-field convention.
+        "attribution": "Computation via pyproj (Proj/PROJ coordinate transforms).",
     }
 
 

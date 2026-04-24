@@ -64,6 +64,10 @@ async def distance_between(
         "great_circle_m": round(geod_m, 2),
         "projected_m": projected_m,
         "azimuth_deg": round(fwd_az % 360, 2),
+        # No dataset attribution — this is pure math on WGS84 + EPSG:27700
+        # via pyproj. The "attribution" field carries that note so every
+        # response in the server follows the same shape.
+        "attribution": "Computation via pyproj (WGS84 geodesic + EPSG:27700 projected distance).",
     }
 
 
