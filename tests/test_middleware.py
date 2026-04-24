@@ -54,7 +54,9 @@ async def test_missing_authorization_header_returns_401():
     body = r.json()
     assert body["error"] == "unauthorized"
     assert "API key" in body["message"]
-    assert r.headers.get("WWW-Authenticate", "").startswith("Bearer")
+    # No WWW-Authenticate header — we're API-key auth, not OAuth Bearer,
+    # and MCP scanners read ``WWW-Authenticate: Bearer`` as an OAuth hint.
+    assert "WWW-Authenticate" not in r.headers
 
 
 async def test_empty_authorization_header_returns_401():

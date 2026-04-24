@@ -66,10 +66,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         x_api_key = request.headers.get("x-api-key")
         ctx = await validate_header(authorization, x_api_key)
         if ctx is None:
+            # Deliberately NOT sending ``WWW-Authenticate: Bearer …`` —
+            # MCP hosting scanners (Smithery) and MCP-aware clients
+            # interpret a Bearer challenge as "this server requires OAuth
+            # 2.1 discovery" per the MCP authorization spec, then hunt
+            # for ``/.well-known/oauth-*`` endpoints that don't exist
+            # here. We're API-key auth only; the body message tells
+            # callers how to authenticate without advertising OAuth.
             return JSONResponse(
                 {"error": "unauthorized", "message": "Missing or invalid API key. Provide Authorization: Bearer <key> or X-API-Key: <key>."},
                 status_code=401,
-                headers={"WWW-Authenticate": 'Bearer realm="geo-mcp"'},
             )
         token = current_auth.set(ctx)
         try:
