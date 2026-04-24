@@ -14,6 +14,7 @@ from typing import Any
 
 import httpx
 
+from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.data_access.projections import to_osgb
 from geo_mcp.tools._validators import validate_wgs84
 
@@ -101,9 +102,12 @@ async def coal_mining_risk_uk(lat: float, lon: float) -> dict[str, Any]:
     if err is not None:
         return err
 
-    # Very coarse NI bbox: west of 5.5°W, south of 55.3°N and north of 54°N.
-    # Good enough to flag coverage_gap before hitting the WMS.
-    if -8.5 < lon < -5.3 and 54.0 < lat < 55.3:
+    # Coverage check: the Coal Authority's data covers GB only (E/W/S).
+    # Northern Ireland falls under DfE's Minerals Branch. Before hitting
+    # the WMS, join against staging.bl_country to decide whether the
+    # point is in a GB country. This replaces an earlier magic-number NI
+    # bbox that missed Channel Islands + Isle of Man and was brittle.
+    if not await _in_gb(lat, lon):
         return _coverage_gap_response(lat, lon)
 
     easting, northing = to_osgb().transform(lon, lat)
@@ -237,6 +241,30 @@ def _verdict(signals: dict[str, Any]) -> tuple[str, str, str]:
          "coalfield properties — it'll be much cheaper than finding out "
          "there's an issue after the fact." + resource_line),
     )
+
+
+async def _in_gb(lat: float, lon: float) -> bool:
+    """Is the point inside any OS Boundary-Line country polygon?
+
+    staging.bl_country holds the E/W/S country outlines (no NI — OS
+    GB only). Any hit here is "inside GB"; a miss is NI, Crown
+    Dependencies, or offshore — all out of Coal Authority scope.
+    """
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        hit = await conn.fetchval(
+            """
+            WITH pt AS (
+                SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700) AS g
+            )
+            SELECT 1
+              FROM staging.bl_country, pt
+             WHERE ST_Covers(geom, pt.g)
+             LIMIT 1
+            """,
+            lon, lat,
+        )
+    return hit is not None
 
 
 def _coverage_gap_response(lat: float, lon: float) -> dict[str, Any]:

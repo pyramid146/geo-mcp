@@ -127,3 +127,47 @@ async def test_list_keys_by_email():
     rows = await list_keys(email=email)
     ids = {r["id"] for r in rows}
     assert {uuid.UUID(meta1["key_id"]), uuid.UUID(meta2["key_id"])} <= {uuid.UUID(str(i)) for i in ids}
+
+
+# ---------------------------------------------------------------------------
+# Pepper: peppered hashes are different from plain SHA-256, validation
+# falls back to legacy SHA-256 so pre-pepper keys keep working after a
+# pepper is introduced.
+# ---------------------------------------------------------------------------
+
+
+def test_hash_key_with_pepper_differs_from_legacy(monkeypatch):
+    from geo_mcp import auth as auth_mod
+    monkeypatch.setattr(auth_mod, "_KEY_PEPPER", b"secret-pepper-value")
+    peppered = auth_mod.hash_key("gmcp_live_sample")
+    legacy = auth_mod._legacy_hash_key("gmcp_live_sample")
+    assert peppered != legacy
+    # Both are sha256-hex, so same length
+    assert len(peppered) == len(legacy) == 64
+
+
+async def test_validate_accepts_legacy_hashed_key_when_pepper_enabled(monkeypatch):
+    # Scenario: key was minted before pepper was set (stored as plain
+    # sha256). Pepper is then introduced. The old key must still validate.
+    from geo_mcp import auth as auth_mod
+
+    # Mint a key WITHOUT pepper — it'll be stored with plain sha256.
+    monkeypatch.setattr(auth_mod, "_KEY_PEPPER", b"")
+    raw, meta = await mint_key(email=_test_email(), label="pre-pepper")
+
+    # Now turn on the pepper (mimic an operator rolling it out).
+    monkeypatch.setattr(auth_mod, "_KEY_PEPPER", b"new-production-pepper")
+
+    ctx = await validate_header(f"Bearer {raw}")
+    assert ctx is not None
+    assert str(ctx.api_key_id) == meta["key_id"]
+
+
+async def test_validate_accepts_peppered_key_when_pepper_enabled(monkeypatch):
+    # New-minted key under pepper validates correctly.
+    from geo_mcp import auth as auth_mod
+    monkeypatch.setattr(auth_mod, "_KEY_PEPPER", b"production-pepper")
+    raw, meta = await mint_key(email=_test_email(), label="post-pepper")
+    ctx = await validate_header(f"Bearer {raw}")
+    assert ctx is not None
+    assert str(ctx.api_key_id) == meta["key_id"]

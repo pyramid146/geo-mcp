@@ -11,6 +11,26 @@ from typing import Any
 from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.tools._validators import validate_radius_m, validate_wgs84
 
+
+async def _in_scotland(lat: float, lon: float) -> bool:
+    """True if the point is inside the OS Boundary-Line Scotland outline."""
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        hit = await conn.fetchval(
+            """
+            WITH pt AS (
+                SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700) AS g
+            )
+            SELECT 1
+              FROM staging.bl_country, pt
+             WHERE code = 'S92000003'
+               AND ST_Covers(geom, pt.g)
+             LIMIT 1
+            """,
+            lon, lat,
+        )
+    return hit is not None
+
 _ATTRIBUTION = (
     "Contains information provided by the police forces of England, Wales "
     "and Northern Ireland via data.police.uk, licensed under the Open "
@@ -130,14 +150,15 @@ async def crime_nearby_uk(
     coverage_note = None
     if total == 0:
         # Scotland falls outside coverage; a Scottish point will return 0.
-        # We detect "probably Scotland" via the NI bbox (rough) only to
-        # emit a useful hint — English/Welsh points returning 0 are
-        # genuinely quiet, so don't falsely flag them.
-        if lat >= 54.6:  # very roughly north of the England-Scotland border
+        # Previously we inferred "probably Scotland" from lat >= 54.6,
+        # which misfired on Cumbria and Northumbria (genuinely quiet
+        # English areas north of Lancaster). Do a proper country lookup
+        # instead so the hint only fires on actual Scottish points.
+        if await _in_scotland(lat, lon):
             coverage_note = (
-                "No crimes found. If this point is in Scotland, "
-                "data.police.uk does not carry Police Scotland data — "
-                "use Police Scotland Recorded Crime statistics instead."
+                "No crimes found — this point is in Scotland, and "
+                "data.police.uk does not carry Police Scotland data. "
+                "Use Police Scotland's Recorded Crime statistics instead."
             )
 
     return {

@@ -1,14 +1,31 @@
 """API key minting, hashing, validation, and usage logging.
 
-Key format:  ``gmcp_live_<32 url-safe base64 chars>``.
-Storage:     SHA-256 hex of the full plaintext key (`key_hash`), plus the
-             plaintext first 12 chars (`key_prefix`) for UI display.
-             The plaintext key itself is never stored; it is shown to the
-             human *once*, at creation time.
+Key format:  ``gmcp_live_<32 url-safe base64 chars>`` — 192 bits of entropy
+             from ``secrets.token_urlsafe(24)``.
+Storage:     HMAC-SHA256(pepper, raw).hexdigest if ``GEO_MCP_KEY_PEPPER`` is
+             set; plain SHA-256 otherwise. Stored in ``meta.api_keys.key_hash``
+             alongside the plaintext first 12 chars (``key_prefix``) for UI
+             display. The plaintext key itself is never stored — it's shown
+             to the human *once*, at creation time.
+
+Pepper:      An optional server-side secret loaded from the
+             ``GEO_MCP_KEY_PEPPER`` env var. When set, keys are stored
+             as HMAC(pepper, raw) so a leaked backup (or a compromised
+             DB snapshot) can't be brute-forced offline without also
+             possessing the pepper. When unset, the code falls back to
+             plain SHA-256 — meaning dev/test instances and existing
+             deployments keep working unchanged.
+
+Backwards compatibility: ``validate_header`` tries BOTH the peppered
+hash and the legacy plain-SHA256 hash on lookup. This way, existing
+keys continue to validate even after a pepper is introduced; they can
+be rotated to peppered hashes at the user's convenience.
 """
 from __future__ import annotations
 
 import hashlib
+import hmac
+import os
 import secrets
 from dataclasses import dataclass
 from typing import Any
@@ -20,12 +37,29 @@ KEY_NAMESPACE: str = "gmcp_live_"
 _KEY_BODY_BYTES: int = 24  # → 32 url-safe base64 chars
 _KEY_PREFIX_LEN: int = 12  # first N chars of plaintext, safe to show
 
+# Loaded once at import time. Changing the pepper after keys have been
+# minted without it will require re-issuing those keys (or leaving them
+# on the legacy-hash fallback path).
+_KEY_PEPPER = os.environ.get("GEO_MCP_KEY_PEPPER", "").encode("utf-8")
+
 
 def generate_key() -> str:
     return KEY_NAMESPACE + secrets.token_urlsafe(_KEY_BODY_BYTES)
 
 
 def hash_key(raw: str) -> str:
+    """Canonical hash used for NEW keys. HMAC-SHA256 with the pepper if
+    one is configured; plain SHA-256 otherwise."""
+    raw_b = raw.encode("utf-8")
+    if _KEY_PEPPER:
+        return hmac.new(_KEY_PEPPER, raw_b, hashlib.sha256).hexdigest()
+    return hashlib.sha256(raw_b).hexdigest()
+
+
+def _legacy_hash_key(raw: str) -> str:
+    """Plain SHA-256 — the hashing used before pepper support existed.
+    Kept as a fallback on ``validate_header`` so pre-pepper keys still
+    authenticate after the pepper is introduced."""
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -77,13 +111,25 @@ async def mint_key(email: str, label: str | None = None) -> tuple[str, dict[str,
 async def validate_header(authorization: str | None) -> AuthContext | None:
     """Parse ``Authorization: Bearer <key>``, look up by hash, return the
     auth context or None. No ``last_used_at`` update here — that's done
-    lazily by ``record_usage`` so protocol-level pings don't produce writes."""
+    lazily by ``record_usage`` so protocol-level pings don't produce writes.
+
+    When a pepper is configured, checks both the peppered (current) and
+    legacy (plain SHA-256) hashes so keys minted before the pepper was
+    introduced continue to work.
+    """
     if not authorization:
         return None
     parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
         return None
     raw = parts[1]
+
+    # Try the canonical hash first; if that misses and a pepper is in
+    # use, try the legacy plain-SHA256 hash as a backwards-compat fallback.
+    candidates = [hash_key(raw)]
+    if _KEY_PEPPER:
+        candidates.append(_legacy_hash_key(raw))
+
     pool = await get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -91,9 +137,10 @@ async def validate_header(authorization: str | None) -> AuthContext | None:
             SELECT k.id, k.customer_id, c.tier
               FROM meta.api_keys k
               JOIN meta.customers c ON c.id = k.customer_id
-             WHERE k.key_hash = $1 AND k.revoked_at IS NULL
+             WHERE k.key_hash = ANY($1::text[]) AND k.revoked_at IS NULL
+             LIMIT 1
             """,
-            hash_key(raw),
+            candidates,
         )
     if row is None:
         return None

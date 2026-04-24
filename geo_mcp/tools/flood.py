@@ -105,14 +105,14 @@ async def flood_risk_uk(
 
 
 def _zone_resp(zone: int, source: str | None) -> dict[str, Any]:
+    # Coverage caveat deliberately NOT on the happy-path response —
+    # a successful Zone-1/2/3 answer implicitly means we're inside
+    # England. The caveat sits on the coverage_gap branch instead,
+    # where it's actually relevant.
     return {
         "verdict": "ok",
         "zone": zone,
         "source": source,  # 'river' / 'sea' / 'river and sea' / None for zone 1
-        "coverage_note": (
-            "Dataset covers England only. Points outside England are "
-            "reported as coverage_gap rather than falling through to Zone 1."
-        ),
         "attribution": _ATTRIBUTION,
     }
 
