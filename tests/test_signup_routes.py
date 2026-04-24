@@ -105,3 +105,49 @@ async def test_signup_verify_rejects_missing_token():
     async with _client_for(build_app()) as c:
         r = await c.get("/signup/verify")
     assert r.status_code == 400
+
+
+async def test_client_ip_prefers_cf_connecting_ip():
+    # Direct unit test of _client_ip header precedence.
+    from starlette.requests import Request
+    from geo_mcp.server import _client_ip
+
+    scope = {
+        "type": "http",
+        "headers": [
+            (b"cf-connecting-ip", b"203.0.113.9"),
+            (b"x-forwarded-for", b"1.2.3.4, 5.6.7.8"),
+        ],
+        "client": ("10.0.0.1", 52345),
+    }
+    req = Request(scope)
+    assert _client_ip(req) == "203.0.113.9"
+
+
+async def test_client_ip_xff_takes_last_entry_not_first():
+    # Without CF, fallback to X-Forwarded-For's LAST value
+    # (the nearest hop, hardest to spoof — not the first which is
+    # client-supplied).
+    from starlette.requests import Request
+    from geo_mcp.server import _client_ip
+
+    scope = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b"1.2.3.4, 203.0.113.9")],
+        "client": ("10.0.0.1", 52345),
+    }
+    req = Request(scope)
+    assert _client_ip(req) == "203.0.113.9"
+
+
+async def test_client_ip_falls_back_to_socket_peer():
+    from starlette.requests import Request
+    from geo_mcp.server import _client_ip
+
+    scope = {
+        "type": "http",
+        "headers": [],
+        "client": ("10.0.0.1", 52345),
+    }
+    req = Request(scope)
+    assert _client_ip(req) == "10.0.0.1"

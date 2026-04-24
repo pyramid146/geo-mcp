@@ -821,9 +821,31 @@ _rate_hits: dict[str, list[float]] = {}
 
 
 def _client_ip(request: Request) -> str:
+    """Resolve the real client IP, preferring Cloudflare's
+    ``CF-Connecting-IP`` header over X-Forwarded-For.
+
+    Cloudflare guarantees it sets CF-Connecting-IP to the original
+    client IP on every proxied request and strips any client-supplied
+    value before passing through — so it's a single authoritative
+    field, not a comma-separated list a caller can spoof by prepending
+    their own value. X-Forwarded-For, by contrast, is client-supplied
+    by convention and trivially forged (`X-Forwarded-For: 1.2.3.4`
+    appears as the first hop whether it's real or not).
+
+    Fallback order: CF-Connecting-IP → X-Forwarded-For (accept with a
+    warning-grade caveat; used only when Cloudflare isn't in the path,
+    e.g. direct-to-blackbird testing over Tailscale) → raw socket peer.
+    """
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
-        return fwd.split(",")[0].strip()
+        # Take the LAST entry, not the first — the last hop is the one
+        # closest to our origin and the least client-controllable. With
+        # no Cloudflare in front this is still spoofable but markedly
+        # harder than trusting the first entry.
+        return fwd.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
