@@ -109,6 +109,7 @@ async def recent_sales_uk(
                AND ppd_category_type = 'A'
                AND record_status <> 'D'
              ORDER BY date_of_transfer DESC
+             LIMIT 2000
             """,
             spaced, start,
         )

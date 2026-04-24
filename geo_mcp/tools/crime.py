@@ -83,24 +83,40 @@ async def crime_nearby_uk(
         return {"error": "invalid_months", "message": f"months must be 1..{_MAX_MONTHS}."}
 
     pool = await get_pool()
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            """
-            WITH pt AS (
-                SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700) AS g
-            ),
-            win AS (
-                SELECT COALESCE(MAX(month), CURRENT_DATE) AS latest FROM staging.police_crimes
+    # Statement timeout bounds the worst-case cost of a big-radius-+-
+    # long-window combo against a dense urban centre. A 5 km radius over
+    # 36 months at Westminster can scan hundreds of thousands of rows;
+    # anything taking more than 15 s is either data drift or an abuser,
+    # and asyncpg will cancel cleanly and surface an error to the caller
+    # rather than hogging the pool.
+    try:
+        async with pool.acquire() as conn:
+            rows = await conn.fetch(
+                """
+                WITH pt AS (
+                    SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700) AS g
+                ),
+                win AS (
+                    SELECT COALESCE(MAX(month), CURRENT_DATE) AS latest FROM staging.police_crimes
+                )
+                SELECT crime_type, month::text AS month, COUNT(*)::int AS n
+                  FROM staging.police_crimes p, pt, win
+                 WHERE ST_DWithin(p.geom_osgb, pt.g, $3)
+                   AND p.month >= (win.latest - make_interval(months => $4))::date
+                 GROUP BY crime_type, month
+                 ORDER BY month, crime_type
+                """,
+                lon, lat, radius_m, months,
+                timeout=15.0,
             )
-            SELECT crime_type, month::text AS month, COUNT(*)::int AS n
-              FROM staging.police_crimes p, pt, win
-             WHERE ST_DWithin(p.geom_osgb, pt.g, $3)
-               AND p.month >= (win.latest - make_interval(months => $4))::date
-             GROUP BY crime_type, month
-             ORDER BY month, crime_type
-            """,
-            lon, lat, radius_m, months,
-        )
+    except asyncio.TimeoutError:
+        return {
+            "error": "query_timeout",
+            "message": (
+                "The crime query took too long to complete — try a "
+                "smaller radius or shorter time window."
+            ),
+        }
 
     total = sum(r["n"] for r in rows)
     by_type: dict[str, int] = {}

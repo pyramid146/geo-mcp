@@ -202,13 +202,17 @@ async def energy_performance_uk(
     spaced = canonical_spaced_postcode(q)
 
     async with pool.acquire() as conn:
-        # All certificates in postcode
+        # All certificates in postcode, up to a safety cap. Dense urban
+        # postcodes can carry hundreds of EPCs over the register's
+        # history; fetching thousands is wasteful given we dedupe to
+        # one-per-UPRN and return at most 20 to the caller anyway.
         rows = await conn.fetch(
             """
             SELECT *
               FROM staging.epc_domestic
              WHERE postcode = $1
              ORDER BY lodgement_date DESC NULLS LAST
+             LIMIT 2000
             """,
             spaced,
         )
