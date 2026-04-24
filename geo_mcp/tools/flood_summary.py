@@ -13,8 +13,13 @@ _ATTRIBUTION = (
 
 # Count target postcodes up-front so we can reject runaway LAD/region
 # queries fast instead of waiting for a timeout.
+# Two counts — total postcodes in area, and postcodes-in-England — so
+# non-English areas (Wales/Scotland/NI) return coverage_gap instead of
+# silently reporting "zone 1" because the EA dataset doesn't cover them.
 _COUNT_TEMPLATE = """
-SELECT COUNT(*)::int
+SELECT
+    COUNT(*)::int                                        AS total,
+    COUNT(*) FILTER (WHERE ctry25cd = 'E92000001')::int  AS england
   FROM staging.onspd
  WHERE {area_filter} AND doterm IS NULL AND geom_osgb IS NOT NULL;
 """
@@ -26,7 +31,7 @@ SELECT COUNT(*)::int
 _ROFRS_TEMPLATE = """
 WITH target_pcds AS (
     SELECT pcds FROM staging.onspd
-     WHERE {area_filter} AND doterm IS NULL
+     WHERE {area_filter} AND doterm IS NULL AND ctry25cd = 'E92000001'
 )
 SELECT
     COUNT(*)                                         ::int AS postcodes_with_rofrs_entry,
@@ -60,7 +65,10 @@ SELECT
     END AS zone,
     COUNT(*)::int AS n
   FROM staging.onspd o
- WHERE {area_filter} AND o.doterm IS NULL AND o.geom_osgb IS NOT NULL
+ WHERE {area_filter}
+   AND o.doterm IS NULL
+   AND o.geom_osgb IS NOT NULL
+   AND o.ctry25cd = 'E92000001'    -- zone lookup only for English postcodes
  GROUP BY 1;
 """
 
@@ -151,8 +159,10 @@ async def flood_risk_summary_uk(area: str) -> dict[str, Any]:
                 ),
             }
         count_sql = _COUNT_TEMPLATE.format(area_filter=resolved.filter_sql)
-        n = await conn.fetchval(count_sql, resolved.param)
-        if n is None or n == 0:
+        counts = await conn.fetchrow(count_sql, resolved.param)
+        n_total = (counts or {}).get("total") if counts else 0
+        n_england = (counts or {}).get("england") if counts else 0
+        if not n_total:
             return {
                 "error": "empty_area",
                 "message": (
@@ -161,16 +171,37 @@ async def flood_risk_summary_uk(area: str) -> dict[str, Any]:
                 ),
                 "area": resolved.to_meta(area),
             }
-        if n > _MAX_POSTCODES:
+        if n_england == 0:
+            # Entirely outside EA Flood Map for Planning coverage — return
+            # an explicit coverage_gap rather than a misleading "zone 1"
+            # summary. Matches the fix applied to flood_risk_uk.
+            return {
+                "verdict": "coverage_gap",
+                "area": resolved.to_meta(area),
+                "postcodes_considered": n_total,
+                "postcodes_in_england": 0,
+                "message": (
+                    f"{resolved.resolved_to} has no English postcodes — the "
+                    "EA Flood Map for Planning only covers England. "
+                    "Use Natural Resources Wales (NRW), SEPA (Scotland), "
+                    "or DAERA (NI) for country-specific flood data."
+                ),
+                "source": (
+                    "ONSPD Feb 2026 + EA Flood Map for Planning + EA RoFRS"
+                ),
+                "attribution": _ATTRIBUTION,
+            }
+        if n_england > _MAX_POSTCODES:
             return {
                 "error": "area_too_large",
                 "message": (
-                    f"{resolved.resolved_to} contains {n} live postcodes; the "
-                    f"summary tool caps at {_MAX_POSTCODES}. Narrow the area "
-                    "(e.g. use a postcode district instead of a whole LAD or region)."
+                    f"{resolved.resolved_to} contains {n_england} live English "
+                    f"postcodes; the summary tool caps at {_MAX_POSTCODES}. "
+                    "Narrow the area (e.g. use a postcode district instead of "
+                    "a whole LAD or region)."
                 ),
                 "area": resolved.to_meta(area),
-                "postcodes_considered": n,
+                "postcodes_considered": n_england,
             }
 
         sql = _QUERY_TEMPLATE.format(area_filter=resolved.filter_sql)
@@ -205,18 +236,20 @@ async def flood_risk_summary_uk(area: str) -> dict[str, Any]:
         }
 
     return {
+        "verdict": "ok",
         "area": resolved.to_meta(area),
-        "postcodes_considered": total,
+        "postcodes_considered": total,            # English postcodes zoned
+        "postcodes_in_area_total": n_total,       # incl. non-English
+        "postcodes_outside_coverage": n_total - n_england,
         "by_zone": by_zone,
         "worst_zone": worst,
-        "pct_in_any_flood_zone": round(100 * flood_exposed / total, 2),
+        "pct_in_any_flood_zone": round(100 * flood_exposed / total, 2) if total else 0.0,
         "probability": probability,
         "coverage_note": (
-            "`by_zone` is from the EA Flood Map for Planning — England only; "
-            "postcodes outside England land in zone 1 by default. "
-            "`probability` is from EA RoFRS (England only too) and accounts "
-            "for flood defences; postcodes not in RoFRS simply aren't counted "
-            "there rather than being treated as zero-risk."
+            "`by_zone` and `probability` only count English postcodes — EA data "
+            "is England-only. `postcodes_outside_coverage` reports how many "
+            "Welsh/Scottish/NI postcodes fell in the area but weren't zoned. "
+            "For country-specific flood data use NRW / SEPA / DAERA."
         ),
         "source": (
             "ONSPD Feb 2026 + EA Flood Map for Planning + EA RoFRS (Postcodes in Areas at Risk)"

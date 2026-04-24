@@ -73,3 +73,19 @@ async def test_unresolved_area_returns_error():
 async def test_empty_input_returns_error():
     r = await flood_risk_summary_uk("   ")
     assert r["error"] == "invalid_input"
+
+
+async def test_welsh_postcode_district_is_coverage_gap():
+    # CF10 is central Cardiff — no EA Flood Map coverage.
+    # Should flip verdict=coverage_gap, not silently report zone 1.
+    r = await flood_risk_summary_uk("CF10")
+    assert r.get("verdict") == "coverage_gap"
+    assert r["postcodes_in_england"] == 0
+    assert "NRW" in r["message"] or "Wales" in r["message"] or "England" in r["message"]
+
+
+async def test_scottish_postcode_district_is_coverage_gap():
+    # EH1 is central Edinburgh — no EA Flood Map coverage.
+    r = await flood_risk_summary_uk("EH1")
+    assert r.get("verdict") == "coverage_gap"
+    assert r["postcodes_in_england"] == 0
