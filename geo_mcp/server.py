@@ -10,7 +10,11 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from geo_mcp.config import load_settings
 from geo_mcp.data_access.postgis import get_pool
-from geo_mcp.middleware import AuthMiddleware, UsageLoggingMiddleware
+from geo_mcp.middleware import (
+    AuthMiddleware,
+    RateLimitMiddleware,
+    UsageLoggingMiddleware,
+)
 from geo_mcp.signup import start_signup, verify_signup
 from geo_mcp.tools.boreholes import boreholes_nearby_uk
 from geo_mcp.tools.building import building_footprint_uk
@@ -49,7 +53,11 @@ log = logging.getLogger("geo_mcp")
 
 def build_app() -> FastMCP:
     app = FastMCP(name="geo-mcp")
+    # Order matters: UsageLogging first (becomes the outer wrap), RateLimit
+    # after (inner). Rate-limit rejections propagate out through UsageLogging
+    # so they still land in meta.usage_log with error_code='rate_limited'.
     app.add_middleware(UsageLoggingMiddleware())
+    app.add_middleware(RateLimitMiddleware())
     app.tool(transform_coords)
     app.tool(distance_between)
     app.tool(geocode_uk)
