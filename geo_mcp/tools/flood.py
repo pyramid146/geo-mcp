@@ -23,6 +23,21 @@ SELECT z.flood_zone, z.flood_source
  LIMIT 1;
 """
 
+# Is the point inside the England country boundary (OS Boundary-Line)?
+# Used to distinguish a genuine Zone 1 from an out-of-coverage point —
+# the EA's Flood Map for Planning only covers England, so a missing
+# polygon could mean "low risk in England" or "outside the dataset".
+_IN_ENGLAND_QUERY = """
+WITH pt AS (
+    SELECT ST_Transform(ST_SetSRID(ST_MakePoint($1, $2), 4326), 27700) AS g
+)
+SELECT 1
+  FROM staging.bl_country, pt
+ WHERE code = 'E92000001'
+   AND ST_Covers(geom, pt.g)
+ LIMIT 1;
+"""
+
 
 async def flood_risk_uk(
     lat: float,
@@ -44,13 +59,14 @@ async def flood_risk_uk(
     EA's raw strings: `river`, `sea`, `river and sea`, `river / undefined`,
     `undefined`, `unknown`, or null for zone 1 / no coverage.
 
-    Coverage is **England only**. For a Welsh, Scottish, or Northern Irish
-    point the tool returns zone 1 by default (no polygon coverage), which
-    is misleading; check the `region` / `country` context separately
-    (e.g. via `reverse_geocode_uk`) before acting on this.
+    Coverage is **England only**. For a point in Scotland, Wales, or
+    Northern Ireland the tool returns ``{verdict: "coverage_gap", zone: null}``
+    — an explicit signal that the EA dataset doesn't apply, not a false
+    Zone 1. Use a country-specific flood dataset (NRW / SEPA / DAERA)
+    for those.
 
     Not included in this version (deferred to a later release):
-      - surface-water flood risk (distinct EA dataset, RoFRS)
+      - surface-water flood risk (distinct EA dataset, RoFSW)
       - flags for whether the area is defended (Areas Benefiting from
         Defences dataset)
 
@@ -58,8 +74,14 @@ async def flood_risk_uk(
         lat: WGS84 latitude, -90..90.
         lon: WGS84 longitude, -180..180.
 
-    Returns `{zone: 1|2|3, source, coverage_note, attribution}`. On
-    invalid input, returns `{"error": ..., "message": ...}`.
+    Returns (England point):
+        ``{verdict: "ok", zone: 1|2|3, source, coverage_note, attribution}``
+
+    Returns (non-England point):
+        ``{verdict: "coverage_gap", zone: null, source: null,
+           coverage_note: ..., attribution}``
+
+    On invalid input, returns ``{"error": ..., "message": ...}``.
     """
     err = validate_wgs84(lat, lon)
     if err is not None:
@@ -69,21 +91,42 @@ async def flood_risk_uk(
     async with pool.acquire() as conn:
         fz3 = await conn.fetchrow(_QUERY, lon, lat, "FZ3")
         if fz3 is not None:
-            return _resp(3, fz3["flood_source"])
+            return _zone_resp(3, fz3["flood_source"])
         fz2 = await conn.fetchrow(_QUERY, lon, lat, "FZ2")
         if fz2 is not None:
-            return _resp(2, fz2["flood_source"])
-    return _resp(1, None)
+            return _zone_resp(2, fz2["flood_source"])
+        # No polygon hit. Distinguish "genuine Zone 1 in England" from
+        # "outside the dataset's coverage" by checking the England
+        # country polygon.
+        in_england = await conn.fetchval(_IN_ENGLAND_QUERY, lon, lat)
+    if in_england:
+        return _zone_resp(1, None)
+    return _coverage_gap_resp()
 
 
-def _resp(zone: int, source: str | None) -> dict[str, Any]:
+def _zone_resp(zone: int, source: str | None) -> dict[str, Any]:
     return {
+        "verdict": "ok",
         "zone": zone,
-        "source": source,  # 'Rivers' / 'Sea' / 'Rivers and Sea' / None for zone 1
+        "source": source,  # 'river' / 'sea' / 'river and sea' / None for zone 1
         "coverage_note": (
-            "Dataset covers England only. Points in Scotland, Wales, or "
-            "Northern Ireland will return zone 1 here but are not actually "
-            "assessed — use a country-specific flood dataset for those."
+            "Dataset covers England only. Points outside England are "
+            "reported as coverage_gap rather than falling through to Zone 1."
+        ),
+        "attribution": _ATTRIBUTION,
+    }
+
+
+def _coverage_gap_resp() -> dict[str, Any]:
+    return {
+        "verdict": "coverage_gap",
+        "zone": None,
+        "source": None,
+        "coverage_note": (
+            "Point lies outside England. The EA Flood Map for Planning "
+            "only covers England. For Wales use Natural Resources Wales' "
+            "flood map; for Scotland use SEPA; for Northern Ireland use "
+            "DAERA."
         ),
         "attribution": _ATTRIBUTION,
     }

@@ -14,6 +14,13 @@ set -a; source "${REPO_ROOT}/.env"; set +a
 export PGPASSWORD="$MCP_INGEST_PASSWORD"
 readonly PG_CONN="host=127.0.0.1 port=5432 dbname=${POSTGRES_DB} user=mcp_ingest password=${MCP_INGEST_PASSWORD}"
 
+# HMLR's GML files carry an xsi:schemaLocation pointing at their
+# internal ETL server (hh-etl-d01.lnx.lr.net:8080), which is
+# unreachable from the public internet. Fast-fail those HTTP calls
+# (default was 134 s per file × 318 files = several hours wasted).
+export GDAL_HTTP_CONNECTTIMEOUT=2
+export GDAL_HTTP_TIMEOUT=3
+
 psql() { command psql -h 127.0.0.1 -p 5432 -U mcp_ingest -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 "$@"; }
 
 if [[ ! -d "$RAW_DIR" ]] || [[ -z "$(ls -1 "$RAW_DIR"/*.zip 2>/dev/null | head -1)" ]]; then
@@ -52,13 +59,13 @@ for gml in "$EXTRACT_DIR"/*/*.gml; do
             -lco LAUNDER=YES -lco SPATIAL_INDEX=NONE -lco PRECISION=NO \
             -a_srs EPSG:27700 -t_srs EPSG:27700 \
             --config PG_USE_COPY YES \
-            -sql "SELECT INSPIREID, gml_id, '$la_code' AS la_code, VALIDFROM FROM PredefinedPolygon"
+            -sql "SELECT INSPIREID, gml_id, '$la_code' AS la_code, VALIDFROM FROM PREDEFINED"
         first=0
     else
         ogr2ogr -f PostgreSQL "PG:${PG_CONN}" "$gml" \
             -nln staging._hmlr_raw -append \
             --config PG_USE_COPY YES \
-            -sql "SELECT INSPIREID, gml_id, '$la_code' AS la_code, VALIDFROM FROM PredefinedPolygon"
+            -sql "SELECT INSPIREID, gml_id, '$la_code' AS la_code, VALIDFROM FROM PREDEFINED"
     fi
 done
 

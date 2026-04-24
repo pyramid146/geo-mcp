@@ -145,6 +145,17 @@ async def nppf_planning_context_uk(
     zone_info = await flood_risk_uk(lat=lat, lon=lon)
     if "error" in zone_info:
         return zone_info
+    if zone_info.get("verdict") == "coverage_gap":
+        return {
+            "verdict": "coverage_gap",
+            "coverage_note": zone_info.get("coverage_note"),
+            "message": (
+                "NPPF planning context is England-only. This point lies "
+                "outside England — consult the relevant devolved planning "
+                "guidance (TAN15 Wales, SPP/SG Scotland, etc.)."
+            ),
+            "attribution": zone_info.get("attribution"),
+        }
     zone = int(zone_info["zone"])
 
     site = {

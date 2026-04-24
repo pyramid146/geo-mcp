@@ -145,10 +145,14 @@ async def flood_assessment_uk(
     # coverage_gap instead.
     ctry_code = (admin or {}).get("country", {}).get("code") if admin else None
     country_covered = ctry_code == "E92000001"
-    if ctry_code is not None and not country_covered:
+    # `flood_risk_uk` may itself return verdict=coverage_gap when the
+    # point is outside England; use that as a second signal in case the
+    # reverse-geocode didn't resolve an admin country code.
+    zone_gap = (zone or {}).get("verdict") == "coverage_gap"
+    if zone_gap or (ctry_code is not None and not country_covered):
         verdict = "coverage_gap"
     else:
-        planning_zone = int(zone.get("zone", 1))
+        planning_zone = int(zone.get("zone") or 1)
         rofrs_worst = (rofrs or {}).get("worst_band")
         surface_band = surface.get("band", "Very Low")
         historic_count = historic.get("count", 0)
