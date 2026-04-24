@@ -108,10 +108,13 @@ async def mint_key(email: str, label: str | None = None) -> tuple[str, dict[str,
     }
 
 
-async def _lookup_raw_key(raw: str) -> AuthContext | None:
+async def lookup_raw_key(raw: str) -> AuthContext | None:
     """DB lookup for a plaintext key. Tries the canonical hash first and
     falls back to the legacy plain-SHA256 hash if a pepper is configured,
-    so keys minted before the pepper was introduced continue to work."""
+    so keys minted before the pepper was introduced continue to work.
+
+    Exposed (no leading underscore) because oauth.py uses it to verify
+    the key a user pastes at the authorization endpoint."""
     candidates = [hash_key(raw)]
     if _KEY_PEPPER:
         candidates.append(_legacy_hash_key(raw))
@@ -153,13 +156,13 @@ async def validate_header(
     if authorization:
         parts = authorization.split()
         if len(parts) == 2 and parts[0].lower() == "bearer":
-            ctx = await _lookup_raw_key(parts[1])
+            ctx = await lookup_raw_key(parts[1])
             if ctx is not None:
                 return ctx
 
     # Fall back to X-API-Key (no scheme prefix — just the raw key).
     if x_api_key and x_api_key.strip():
-        return await _lookup_raw_key(x_api_key.strip())
+        return await lookup_raw_key(x_api_key.strip())
 
     return None
 

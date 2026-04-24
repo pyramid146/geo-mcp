@@ -42,6 +42,11 @@ current_auth: ContextVar[AuthContext | None] = ContextVar("current_auth", defaul
 _PUBLIC_PATHS: frozenset[str] = frozenset({
     "/", "/health", "/status", "/status.json", "/privacy",
     "/signup", "/signup/verify", "/favicon.svg",
+    # OAuth 2.1 endpoints — users hit /authorize in a browser before
+    # they have a token; /token and /register are called by clients
+    # that don't yet have one. The endpoints do their own auth (PKCE,
+    # user-pasted API key) internally.
+    "/oauth/authorize", "/oauth/token", "/oauth/register",
 })
 
 

@@ -52,6 +52,14 @@ async def _sweep_test_rows() -> dict[str, int]:
                       SELECT id FROM meta.customers WHERE email LIKE '%@example.test'
                   )
                  """, "usage_log"),
+                # OAuth auth-codes reference api_keys(granter) + customers —
+                # wipe before api_keys so the FK doesn't block the cascade.
+                ("""
+                 DELETE FROM meta.oauth_auth_codes
+                  WHERE customer_id IN (
+                      SELECT id FROM meta.customers WHERE email LIKE '%@example.test'
+                  )
+                 """, "oauth_auth_codes"),
                 ("""
                  DELETE FROM meta.api_keys
                   WHERE customer_id IN (
@@ -62,6 +70,12 @@ async def _sweep_test_rows() -> dict[str, int]:
                  DELETE FROM meta.pending_signups
                   WHERE email LIKE '%@example.test'
                  """, "pending_signups"),
+                # OAuth clients are test-created; we label them with
+                # 'test-oauth-' prefixes and clean up on that.
+                ("""
+                 DELETE FROM meta.oauth_clients
+                  WHERE name LIKE 'test-oauth-%'
+                 """, "oauth_clients"),
                 ("""
                  DELETE FROM meta.customers WHERE email LIKE '%@example.test'
                  """, "customers"),

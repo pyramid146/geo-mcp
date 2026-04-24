@@ -7,7 +7,7 @@ from fastmcp import FastMCP
 from starlette.middleware import Middleware as ASGIMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from geo_mcp.config import load_settings
 from geo_mcp.data_access.postgis import get_pool
@@ -15,6 +15,15 @@ from geo_mcp.middleware import (
     AuthMiddleware,
     RateLimitMiddleware,
     UsageLoggingMiddleware,
+)
+from geo_mcp.oauth import (
+    authorize_page_html,
+    exchange_code_for_token,
+    issue_authorization_code,
+    oauth_authorization_server_metadata,
+    oauth_protected_resource_metadata,
+    register_client,
+    validate_authorize_request,
 )
 from geo_mcp.signup import start_signup, verify_signup
 from geo_mcp.tools.boreholes import boreholes_nearby_uk
@@ -207,6 +216,133 @@ def build_app() -> FastMCP:
              "postgres": postgres_ok},
             status_code=200 if postgres_ok else 503,
         )
+
+    # ---------------------------------------------------------------------
+    # OAuth 2.1 endpoints (see geo_mcp/oauth.py for protocol detail).
+    # Direct API-key clients don't touch these; MCP hosting platforms
+    # (Smithery) go through the full discovery + authorization-code flow.
+    # ---------------------------------------------------------------------
+
+    @app.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
+    async def oauth_prm(_: Request) -> JSONResponse:
+        return JSONResponse(oauth_protected_resource_metadata())
+
+    @app.custom_route("/.well-known/oauth-protected-resource/mcp", methods=["GET"])
+    async def oauth_prm_mcp(_: Request) -> JSONResponse:
+        # Per-resource variant — some clients probe /.well-known/…/<path>.
+        # Same document, different URL.
+        return JSONResponse(oauth_protected_resource_metadata())
+
+    @app.custom_route("/.well-known/oauth-authorization-server", methods=["GET"])
+    async def oauth_asm(_: Request) -> JSONResponse:
+        return JSONResponse(oauth_authorization_server_metadata())
+
+    @app.custom_route("/oauth/register", methods=["POST"])
+    async def oauth_register(request: Request) -> JSONResponse:
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"error": "invalid_client_metadata",
+                                 "error_description": "body must be JSON"},
+                                status_code=400)
+        try:
+            reg = await register_client(body)
+        except ValueError as e:
+            return JSONResponse({"error": "invalid_client_metadata",
+                                 "error_description": str(e)},
+                                status_code=400)
+        return JSONResponse({
+            "client_id": reg.client_id,
+            "client_name": reg.client_name,
+            "redirect_uris": reg.redirect_uris,
+            "client_id_issued_at": int(reg.created_at.timestamp()),
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+        }, status_code=201)
+
+    @app.custom_route("/oauth/authorize", methods=["GET"])
+    async def oauth_authorize_get(request: Request) -> HTMLResponse:
+        q = request.query_params
+        params, err = await validate_authorize_request(
+            client_id=q.get("client_id"),
+            redirect_uri=q.get("redirect_uri"),
+            response_type=q.get("response_type"),
+            code_challenge=q.get("code_challenge"),
+            code_challenge_method=q.get("code_challenge_method"),
+            state=q.get("state"),
+            scope=q.get("scope"),
+        )
+        if params is None:
+            # Don't redirect — the redirect_uri might be the thing that's
+            # wrong. Show an error page to the browser.
+            return HTMLResponse(_page_error(f"OAuth error: {err}"), status_code=400)
+        return HTMLResponse(authorize_page_html(params))
+
+    @app.custom_route("/oauth/authorize", methods=["POST"])
+    async def oauth_authorize_post(request: Request) -> HTMLResponse:
+        form = await request.form()
+        params, err = await validate_authorize_request(
+            client_id=str(form.get("client_id") or "") or None,
+            redirect_uri=str(form.get("redirect_uri") or "") or None,
+            response_type=str(form.get("response_type") or "") or None,
+            code_challenge=str(form.get("code_challenge") or "") or None,
+            code_challenge_method=str(form.get("code_challenge_method") or "") or None,
+            state=str(form.get("state") or "") or None,
+            scope=str(form.get("scope") or "") or None,
+        )
+        if params is None:
+            return HTMLResponse(_page_error(f"OAuth error: {err}"), status_code=400)
+        api_key = str(form.get("api_key") or "").strip()
+        if not api_key:
+            return HTMLResponse(authorize_page_html(params, error="Please paste your API key."),
+                                status_code=400)
+        code, reason = await issue_authorization_code(params, api_key)
+        if code is None:
+            return HTMLResponse(authorize_page_html(params, error=reason),
+                                status_code=400)
+        # Build the redirect_uri with ?code + state. Using urlencode to
+        # survive redirect_uris that already have query strings.
+        from urllib.parse import urlencode, urlparse, urlunparse
+        u = urlparse(params.redirect_uri)
+        extra = {"code": code}
+        if params.state:
+            extra["state"] = params.state
+        existing = u.query + ("&" if u.query else "") + urlencode(extra)
+        redirect_to = urlunparse(u._replace(query=existing))
+        return RedirectResponse(redirect_to, status_code=302)
+
+    @app.custom_route("/oauth/token", methods=["POST"])
+    async def oauth_token(request: Request) -> JSONResponse:
+        form = await request.form()
+        try:
+            token_resp = await exchange_code_for_token(
+                grant_type=str(form.get("grant_type") or "") or None,
+                code=str(form.get("code") or "") or None,
+                redirect_uri=str(form.get("redirect_uri") or "") or None,
+                client_id=str(form.get("client_id") or "") or None,
+                code_verifier=str(form.get("code_verifier") or "") or None,
+            )
+        except ValueError as e:
+            # Map the exception text to an OAuth-style error body per
+            # RFC 6749 §5.2. The text format is "<code>: <description>".
+            msg = str(e)
+            if ":" in msg:
+                code_part, desc = msg.split(":", 1)
+                return JSONResponse(
+                    {"error": code_part.strip(), "error_description": desc.strip()},
+                    status_code=400,
+                )
+            return JSONResponse(
+                {"error": "invalid_request", "error_description": msg},
+                status_code=400,
+            )
+        # RFC 6749 §5.1 — cache-control headers so tokens don't get cached
+        # by intermediaries.
+        return JSONResponse(token_resp, headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        })
 
     return app
 
