@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "required": ["apiKey"],
+  "properties": {
+    "apiKey": {
+      "type": "string",
+      "title": "API key",
+      "description": "Your geo-mcp API key. Free at https://geomcp.dev/signup — one email, one key, no card.",
+      "format": "password"
+    }
+  }
+}
