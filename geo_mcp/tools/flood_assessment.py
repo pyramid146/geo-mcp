@@ -8,6 +8,7 @@ produce a decision-oriented narrative.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from geo_mcp.tools._validators import is_valid_uk_postcode
@@ -127,14 +128,23 @@ async def flood_assessment_uk(
         rg = await reverse_geocode_uk(lat=lat, lon=lon)
         admin = rg.get("admin") if "error" not in rg else None
 
-    # Now fire the per-signal tools. All point-based; all safe to run
-    # sequentially for now (could parallelise with asyncio.gather once the
-    # caller-latency budget starts mattering).
-    zone = await flood_risk_uk(lat=lat, lon=lon)
-    rofrs = await flood_risk_probability_uk(postcode=site_postcode) if site_postcode else None
-    surface = await surface_water_risk_uk(lat=lat, lon=lon)
-    historic = await historic_floods_uk(lat=lat, lon=lon)
-    nppf = await nppf_planning_context_uk(lat=lat, lon=lon, proposed_vulnerability="more_vulnerable")
+    # Fire the per-signal tools in parallel. They're fully independent —
+    # each queries a different dataset or upstream — so the total latency
+    # is `max(subtool latency)` rather than `sum`. Surface water is the
+    # slowest (~500 ms live EA WMS); the others are DB lookups.
+    # asyncio.gather raises if any sub-task raises, but these tools
+    # return structured error dicts instead of raising, so gather is safe.
+    rofrs_task = (
+        flood_risk_probability_uk(postcode=site_postcode)
+        if site_postcode else asyncio.sleep(0, result=None)
+    )
+    zone, rofrs, surface, historic, nppf = await asyncio.gather(
+        flood_risk_uk(lat=lat, lon=lon),
+        rofrs_task,
+        surface_water_risk_uk(lat=lat, lon=lon),
+        historic_floods_uk(lat=lat, lon=lon),
+        nppf_planning_context_uk(lat=lat, lon=lon, proposed_vulnerability="more_vulnerable"),
+    )
 
     # Derive an overall verdict. "High" if any one of:
     #   - Flood Zone 3
