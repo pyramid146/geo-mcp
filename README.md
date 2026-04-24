@@ -130,12 +130,22 @@ Add to `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.geo-mcp]
-type = "http"
+type = "http"   # some Codex versions use `transport = "http"` instead
 url = "https://geomcp.dev/mcp"
 headers = { Authorization = "Bearer gmcp_live_..." }
 ```
 
-Codex speaks streamable-HTTP MCP natively, so no `mcp-remote` bridge is needed. If the key names above don't take effect, your Codex version may name the schema slightly differently (`transport` vs `type`, etc.) — check `codex --help` or the Codex docs for the exact `mcp_servers` schema for your release.
+Codex speaks streamable-HTTP MCP natively, so no `mcp-remote` bridge is needed.
+
+**Version note**: the key name for the transport has varied between Codex releases — older versions use `transport = "http"`, newer ones `type = "http"`. If the server doesn't get discovered, swap the key and try again. Run `codex --help` or check the current Codex docs for your release.
+
+Verify:
+
+```bash
+codex mcp list       # should list geo-mcp
+```
+
+Restart any existing `codex` session afterwards — like Claude Code, the MCP server list is loaded at startup.
 
 ### Other MCP clients
 
