@@ -23,8 +23,20 @@ mkdir -p "$BACKUP_DIR"
 readonly STAMP=$(date -u +%Y%m%d-%H%M%S)
 readonly OUT="${BACKUP_DIR}/meta-${STAMP}.sql.gz"
 
-echo "[backup] dumping meta schema → ${OUT}"
 export PGPASSWORD="$MCP_ADMIN_PASSWORD"
+
+# Reap expired pending_signups rows before dumping so they don't make it
+# into the backup. An unverified row past its 24h TTL is useless: the
+# token it references will never be redeemed, and the partial unique
+# index in migration 004 means the email can't re-signup if we leave
+# expired-but-present rows sitting around.
+echo "[backup] reaping expired pending_signups"
+reap_out=$(psql -h 127.0.0.1 -p 5432 -U mcp_admin -d "$POSTGRES_DB" -tAc \
+    "DELETE FROM meta.pending_signups WHERE expires_at < now() - interval '1 hour' RETURNING id" \
+    | wc -l)
+echo "[backup] pending_signups reaped: ${reap_out}"
+
+echo "[backup] dumping meta schema → ${OUT}"
 pg_dump \
     -h 127.0.0.1 -p 5432 \
     -U mcp_admin \

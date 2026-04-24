@@ -16,6 +16,12 @@ _DEFAULT_RADIUS_M = 2_000
 _MAX_RADIUS_M = 20_000
 _MAX_RESULTS = 25
 
+# ODS publishes these status codes on epraccur / ebranchs. ACTIVE is
+# the production filter; everything else is treated as excluded when
+# active_only=True. Codified here (rather than hard-coding the string
+# in SQL) so a future ODS schema change is visible in one place.
+_ACTIVE_STATUSES: frozenset[str] = frozenset({"ACTIVE"})
+
 
 async def gp_practices_nearby_uk(
     lat: float,
@@ -72,11 +78,11 @@ async def gp_practices_nearby_uk(
               FROM staging.nhs_gp_practices p, pt
              WHERE p.geom_osgb IS NOT NULL
                AND ST_DWithin(p.geom_osgb, pt.g, $3)
-               AND (NOT $4 OR status_code = 'ACTIVE')
+               AND (NOT $4 OR status_code = ANY($6))
              ORDER BY ST_Distance(p.geom_osgb, pt.g)
              LIMIT $5
             """,
-            lon, lat, radius_m, active_only, _MAX_RESULTS,
+            lon, lat, radius_m, active_only, _MAX_RESULTS, list(_ACTIVE_STATUSES),
         )
 
     practices = [

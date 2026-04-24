@@ -27,7 +27,7 @@ from starlette.responses import JSONResponse
 
 from geo_mcp.auth import AuthContext, record_usage, validate_header
 
-log = logging.getLogger("geo_mcp.middleware")
+log = logging.getLogger(__name__)
 
 # ContextVar populated by AuthMiddleware and read by UsageLoggingMiddleware.
 # Default=None so unauthenticated code paths read cleanly if the var isn't set
@@ -40,7 +40,7 @@ current_auth: ContextVar[AuthContext | None] = ContextVar("current_auth", defaul
 # probe), the root landing page, and the self-service signup + verify
 # endpoints — those *are* what mints a key, so can't require one.
 _PUBLIC_PATHS: frozenset[str] = frozenset({
-    "/", "/health", "/status", "/signup", "/signup/verify", "/favicon.svg",
+    "/", "/health", "/status", "/status.json", "/signup", "/signup/verify", "/favicon.svg",
 })
 
 

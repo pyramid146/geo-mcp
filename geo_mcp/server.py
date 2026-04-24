@@ -48,7 +48,7 @@ from geo_mcp.tools.price_paid import recent_sales_uk
 from geo_mcp.tools.property import property_lookup_uk, property_report_uk
 from geo_mcp.tools.transforms import transform_coords
 
-log = logging.getLogger("geo_mcp")
+log = logging.getLogger(__name__)
 
 
 def build_app() -> FastMCP:
@@ -169,10 +169,7 @@ def build_app() -> FastMCP:
         }
         return JSONResponse(body, status_code=200 if postgres_ok else 503)
 
-    @app.custom_route("/status", methods=["GET"])
-    async def status_page(_: Request) -> HTMLResponse:
-        """Human-readable status — 'Operational' / 'Degraded' plain-English
-        page rendered in the brand shell. No counts or internals."""
+    async def _status_probe() -> bool:
         postgres_ok = False
         try:
             pool = await get_pool()
@@ -180,9 +177,28 @@ def build_app() -> FastMCP:
                 await conn.execute("SELECT 1")
             postgres_ok = True
         except Exception:
-            log.exception("/status: postgres probe failed")
+            log.exception("status probe failed")
+        return postgres_ok
+
+    @app.custom_route("/status", methods=["GET"])
+    async def status_page(_: Request) -> HTMLResponse:
+        """Human-readable status — 'Operational' / 'Degraded' plain-English
+        page rendered in the brand shell. No counts or internals."""
+        postgres_ok = await _status_probe()
         return HTMLResponse(_page_status(postgres_ok),
                             status_code=200 if postgres_ok else 503)
+
+    @app.custom_route("/status.json", methods=["GET"])
+    async def status_json(_: Request) -> JSONResponse:
+        """Machine-readable sibling of /status for external monitors that
+        don't want to HTML-scrape. Same minimal signal as /health, just
+        a different URL for monitoring stacks that expect a .json file."""
+        postgres_ok = await _status_probe()
+        return JSONResponse(
+            {"status": "operational" if postgres_ok else "degraded",
+             "postgres": postgres_ok},
+            status_code=200 if postgres_ok else 503,
+        )
 
     return app
 

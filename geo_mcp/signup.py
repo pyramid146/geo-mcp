@@ -30,7 +30,7 @@ import httpx
 from geo_mcp.auth import mint_key
 from geo_mcp.data_access.postgis import get_pool
 
-log = logging.getLogger("geo_mcp.signup")
+log = logging.getLogger(__name__)
 
 TOKEN_TTL = timedelta(hours=24)
 _TOKEN_BYTES = 24  # → 32 url-safe base64 chars, same shape as API keys

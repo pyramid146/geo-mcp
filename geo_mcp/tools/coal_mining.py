@@ -18,7 +18,7 @@ from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.data_access.projections import to_osgb
 from geo_mcp.tools._validators import validate_wgs84
 
-log = logging.getLogger("geo_mcp.tools.coal_mining")
+log = logging.getLogger(__name__)
 
 _WMS_URL = (
     "https://map.bgs.ac.uk/arcgis/services/CoalAuthority/"
