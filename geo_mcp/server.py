@@ -930,7 +930,7 @@ def _client_ip(request: Request) -> str:
 
     Fallback order: CF-Connecting-IP → X-Forwarded-For (accept with a
     warning-grade caveat; used only when Cloudflare isn't in the path,
-    e.g. direct-to-blackbird testing over Tailscale) → raw socket peer.
+    e.g. direct-to-origin testing over a private network) → raw socket peer.
     """
     cf_ip = request.headers.get("cf-connecting-ip")
     if cf_ip:

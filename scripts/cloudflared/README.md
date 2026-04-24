@@ -27,7 +27,7 @@ cloudflared tunnel create geo-mcp
 
 Prints a UUID and writes `~/.cloudflared/<UUID>.json` (the tunnel's
 credentials). Keep this file safe — anyone with it can route traffic
-into your blackbird.
+into your origin host.
 
 ### 3. Route DNS at the apex
 
@@ -89,4 +89,4 @@ Expected: `{"status":"ok","postgres":true,"tools":21,"meta_rows":{...}}`.
   the service downloads new versions on a timer.
 - **To stop exposing the server**: `sudo systemctl stop cloudflared`.
   The tunnel closes; `geomcp.dev` becomes unreachable from outside;
-  nothing else on blackbird is affected.
+  nothing else on the host is affected.

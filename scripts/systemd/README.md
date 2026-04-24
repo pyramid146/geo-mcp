@@ -44,8 +44,13 @@ Creates `geo_restore_drill` scratch database, pg_restores the most
 recent backup, asserts row counts on the three core tables, drops the
 scratch database. Fails loudly if the backup looks suspicious.
 
-## Offsite backup (Phase 6)
+## Offsite backup
 
-The backups are currently on the same NVMe as the live DB — a disk
-failure takes both. Wiring `rclone` to push `/data/backups/` to
-Proton Drive / S3 / Backblaze is a Phase 6 concern.
+`scripts/backup.sh` also `rclone`-syncs the local backup directory to
+an S3-compatible remote if one is configured (env `GEO_MCP_OFFSITE_REMOTE`,
+default `r2`). Silently skipped when no rclone remote is set up, so
+the local backup path works standalone.
+
+Typical setup: a Cloudflare R2 bucket + a read/write API token, added
+to `rclone.conf` under the `r2` remote name. See `scripts/backup.sh`
+for the exact env variables used.
