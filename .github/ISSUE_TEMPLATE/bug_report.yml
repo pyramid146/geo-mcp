@@ -1,0 +1,73 @@
+name: Bug report
+description: Something doesn't work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more specific
+        the reproduction, the faster we can fix it.
+
+  - type: input
+    id: tool
+    attributes:
+      label: Which tool
+      description: e.g. `flood_assessment_uk`, `property_lookup_uk`. Leave blank for server-wide issues.
+      placeholder: flood_assessment_uk
+    validations:
+      required: false
+
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Inputs
+      description: |
+        The arguments you passed (postcode, UPRN, lat/lon, etc.).
+        **Do not paste your API key.**
+      render: json
+      placeholder: |
+        {"postcode": "GL20 5BY"}
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What you got
+      description: The response, or an excerpt of it.
+      render: json
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      description: Claude Desktop version, Claude Code, Codex CLI, custom, etc.
+      placeholder: Claude Desktop 1.3883
+    validations:
+      required: false
+
+  - type: input
+    id: instance
+    attributes:
+      label: Hosted or self-hosted?
+      description: geomcp.dev, or your own build.
+      placeholder: geomcp.dev
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Logs, timing, patterns ("it only fails for Scottish postcodes"), etc.
+    validations:
+      required: false

@@ -1,0 +1,71 @@
+name: Dataset request
+description: A new open-data dataset to ingest
+labels: ["dataset"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        geo-mcp is built on UK open data (OGLv3 by default). If the
+        dataset isn't open-licensed for commercial reuse, we can't
+        ingest it unless there's a revenue case that pays for a
+        commercial licence.
+
+  - type: input
+    id: name
+    attributes:
+      label: Dataset name
+      placeholder: e.g. Defra Agricultural Land Classification
+    validations:
+      required: true
+
+  - type: input
+    id: publisher
+    attributes:
+      label: Publisher
+      placeholder: Defra / Natural England / BGS / etc.
+    validations:
+      required: true
+
+  - type: input
+    id: licence
+    attributes:
+      label: Licence
+      description: OGLv3? Bespoke licence? Commercial-only? Unknown?
+      placeholder: OGL v3.0
+    validations:
+      required: true
+
+  - type: input
+    id: source_url
+    attributes:
+      label: Where it's published
+      placeholder: https://data.gov.uk/dataset/...
+    validations:
+      required: true
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What question it would unlock
+      description: |
+        Concrete user question this dataset would let an agent answer.
+    validations:
+      required: true
+
+  - type: input
+    id: coverage
+    attributes:
+      label: Coverage
+      description: GB / England / England + Wales / Scotland / etc.
+      placeholder: England only
+    validations:
+      required: false
+
+  - type: input
+    id: format
+    attributes:
+      label: Format + size (if known)
+      description: Shapefile / GeoPackage / CSV / WMS / ArcGIS REST / …; rough on-disk size.
+      placeholder: GeoPackage, ~500 MB zipped
+    validations:
+      required: false

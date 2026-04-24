@@ -191,6 +191,10 @@ def build_app() -> FastMCP:
         return HTMLResponse(_page_status(postgres_ok),
                             status_code=200 if postgres_ok else 503)
 
+    @app.custom_route("/privacy", methods=["GET"])
+    async def privacy_page(_: Request) -> HTMLResponse:
+        return HTMLResponse(_PAGE_PRIVACY)
+
     @app.custom_route("/status.json", methods=["GET"])
     async def status_json(_: Request) -> JSONResponse:
         """Machine-readable sibling of /status for external monitors that
@@ -622,7 +626,7 @@ document.addEventListener('click', e => {
 </main>
 <footer class="site-footer">
   <div class="container">
-    <span>UK open-data MCP server · OGLv3 · MIT-licensed code · <a href="https://github.com/pyramid146/geo-mcp">github.com/pyramid146/geo-mcp</a></span>
+    <span>UK open-data MCP server · OGLv3 · MIT-licensed code · <a href="https://github.com/pyramid146/geo-mcp">github.com/pyramid146/geo-mcp</a> · <a href="/privacy">Privacy</a></span>
     <span>geomcp.dev</span>
   </div>
 </footer>{copy_js}
@@ -741,7 +745,8 @@ _PAGE_SIGNUP_FORM = _shell("Get an API key — geo-mcp", """
       </div>
     </form>
     <p class="form-hint">We email your key once and only use your
-       address to let you revoke or re-mint it. No marketing.</p>
+       address to let you revoke or re-mint it. No marketing.
+       See <a href="/privacy">how we handle your data</a>.</p>
   </section>
 </div>
 """)
@@ -755,6 +760,69 @@ _PAGE_SIGNUP_SENT = _shell("Check your email — geo-mcp", """
        its way. It expires in 24 hours.</p>
     <p>Didn't get it? Check your spam folder, then
        <a href="/signup">try again</a>.</p>
+  </section>
+</div>
+""")
+
+
+_PAGE_PRIVACY = _shell("Privacy — geo-mcp", """
+<div class="container-narrow">
+  <section class="hero">
+    <h1>Privacy</h1>
+    <p class="sub">geo-mcp is a small service. The privacy story is
+       deliberately small too.</p>
+
+    <h2>What we collect</h2>
+    <ul>
+      <li><strong>Your email address</strong> — when you sign up at
+          <code>/signup</code>. Used once to send the verification link
+          that reveals your API key, and kept on file so we can contact
+          you about service changes that actually affect you (e.g. key
+          rotation, deprecation notices). We never share it. We never
+          send marketing.</li>
+      <li><strong>Per-request IP address</strong> — transiently, for
+          rate-limiting and abuse prevention on <code>/signup</code>.
+          Not joined to your account beyond the rate-limit window.</li>
+      <li><strong>Tool-call metadata</strong> — timestamp, tool name,
+          duration, and outcome status, logged per API key. Used for
+          service metering + debugging. The <em>arguments</em> you pass
+          to tool calls are not logged.</li>
+    </ul>
+
+    <h2>How long we keep it</h2>
+    <ul>
+      <li>Email addresses + API-key records: until you ask us to
+          delete them, or the account is inactive for two years.</li>
+      <li>Usage metadata (tool calls): rolling 90 days, then
+          aggregated and deleted.</li>
+      <li>Backup snapshots: 30 days local, 30 days offsite (both
+          expire automatically).</li>
+    </ul>
+
+    <h2>Your rights (GDPR / UK DPA)</h2>
+    <p>Email <a href="mailto:cairo.pyramids@protonmail.com">cairo.pyramids@protonmail.com</a>
+       to request export or deletion of the data tied to your account.
+       We'll action it within 30 days.</p>
+
+    <h2>Cookies</h2>
+    <p>The service doesn't set any cookies. The landing + signup pages
+       are fully static. If you're visiting through Cloudflare's edge,
+       Cloudflare may set its own performance cookies independently of
+       geo-mcp — see
+       <a href="https://www.cloudflare.com/privacypolicy/">their
+       privacy policy</a>.</p>
+
+    <h2>Third parties we use</h2>
+    <ul>
+      <li><strong>Resend</strong> — sends the single verification
+          email when you sign up. They see your address (necessarily)
+          and the email body (just the link). They don't retain it
+          beyond the sending window.</li>
+      <li><strong>Cloudflare</strong> — handles DNS, TLS termination,
+          and the tunnel that fronts the service. They see request
+          metadata at the edge.</li>
+      <li>That's it. No analytics. No ad networks. No trackers.</li>
+    </ul>
   </section>
 </div>
 """)

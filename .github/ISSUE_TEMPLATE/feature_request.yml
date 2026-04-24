@@ -1,0 +1,40 @@
+name: Feature / tool request
+description: A new tool, new argument, or new behaviour on an existing tool
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this is a request to ingest a NEW open dataset (rather than
+        work with what's already loaded), use the "Dataset request"
+        template instead — the answers there are quite different.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: What are you trying to answer
+      description: |
+        The user-facing question, not the API shape. e.g. "what's the
+        nearest school with an Outstanding Ofsted rating?" is more
+        useful than "add an Ofsted filter to schools_nearby_uk".
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_workaround
+    attributes:
+      label: What you're doing today (if anything)
+      description: Chaining existing tools? Falling back to the LLM's training data? Something else entirely?
+    validations:
+      required: false
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: Proposed tool name + signature (optional)
+      description: If you have a clear idea of what the tool should look like.
+      render: python
+      placeholder: |
+        async def schools_by_ofsted_uk(lat, lon, radius_m=1500, min_rating="Good"): ...
+    validations:
+      required: false

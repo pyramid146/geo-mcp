@@ -1,0 +1,15 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Hosted service (geomcp.dev)
+    url: https://geomcp.dev
+    about: |
+      Before opening an issue, check the hosted service is reachable
+      (status at geomcp.dev/status) and that your API key hasn't
+      been revoked. For general usage questions, pointing an MCP
+      client at geomcp.dev/mcp and asking the model to "list your
+      geo-mcp tools" is usually the fastest path.
+  - name: Self-hosting guide
+    url: https://github.com/pyramid146/geo-mcp/blob/master/DEVELOPMENT.md
+    about: |
+      Running your own instance? DEVELOPMENT.md covers the ingest
+      pattern, env reference, and ops notes.
