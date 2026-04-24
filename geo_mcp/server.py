@@ -638,25 +638,36 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
       </ul>
     </div>
     <div class="prompt-card" style="--domain: var(--c-property);">
-      <h3>Property</h3>
+      <h3>Property &amp; title</h3>
       <ul>
         <li>Give me a full property report for UPRN 10033544614.</li>
         <li>Draw the building footprint polygon for this UPRN.</li>
+        <li>What's the registered freehold title polygon here?</li>
         <li>What have flats sold for in SW1A 1AA in the last 5 years?</li>
         <li>What's the EPC rating and construction age of this property?</li>
       </ul>
     </div>
     <div class="prompt-card" style="--domain: var(--c-heritage);">
-      <h3>Heritage &amp; planning</h3>
+      <h3>Heritage, planning &amp; environment</h3>
       <ul>
         <li>Is 10 Downing Street a listed building?</li>
         <li>Scheduled monuments within 500 m of this coordinate?</li>
         <li>Is this property inside an SSSI, AONB, or Ancient Woodland?</li>
+        <li>What parks and green spaces are within 500 m?</li>
         <li>Can a new dwelling be built here under NPPF?</li>
       </ul>
     </div>
+    <div class="prompt-card" style="--domain: var(--c-geocoding);">
+      <h3>Local amenity &amp; community</h3>
+      <ul>
+        <li>How many crimes in 500 m over the last year, by type?</li>
+        <li>Three nearest primary schools with their Ofsted ratings?</li>
+        <li>Nearest GP practice to this postcode?</li>
+        <li>What's the IMD decile for this LSOA?</li>
+      </ul>
+    </div>
     <div class="prompt-card" style="--domain: var(--c-ground);">
-      <h3>Ground &amp; elevation</h3>
+      <h3>Ground &amp; land</h3>
       <ul>
         <li>What's the bedrock at 51.5014, -0.1419?</li>
         <li>Any BGS boreholes within 1 km of this point?</li>
@@ -664,20 +675,13 @@ _PAGE_ROOT = _shell("geo-mcp — UK geospatial for LLM agents", """
         <li>What's the elevation profile for this postcode area?</li>
       </ul>
     </div>
-    <div class="prompt-card" style="--domain: var(--c-heritage);">
-      <h3>Crime &amp; safety</h3>
-      <ul>
-        <li>How many burglaries in this postcode area in the last year?</li>
-        <li>What's the crime mix within 500 m of this coordinate?</li>
-        <li>Has recorded crime been trending up or down here?</li>
-      </ul>
-    </div>
     <div class="prompt-card" style="--domain: var(--c-geocoding);">
-      <h3>Geocoding</h3>
+      <h3>Geocoding &amp; routes</h3>
       <ul>
         <li>Where is SW1A 1AA?</li>
-        <li>What postcode is closest to these coordinates?</li>
-        <li>Convert these British National Grid coordinates to WGS84.</li>
+        <li>Closest named river or A-road to this coordinate?</li>
+        <li>How far is it between these two UK points?</li>
+        <li>Convert British National Grid coords to WGS84.</li>
       </ul>
     </div>
   </div>

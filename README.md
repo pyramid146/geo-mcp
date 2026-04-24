@@ -15,22 +15,33 @@ Once connected, an agent can answer questions it otherwise can't:
 - "Has the area around CB3 9AX ever flooded, and how recently?"
 - "Is this postcode in Flood Zone 2 or 3 for planning purposes?"
 - "How does surface water risk differ from river risk at this point?"
-
-**Property**
-- "Give me a full property report for UPRN 10033544614" *(returns flood, EPC, sales, heritage, elevation in one call)*
-- "What have flats sold for in SW1A 1AA in the last 5 years?"
-- "What's the EPC rating and construction age of this property?"
 - "Would this property be eligible for Flood Re?"
 
-**Heritage and planning**
+**Property and title**
+- "Give me a full property report for UPRN 10033544614" *(returns flood, EPC, sales, heritage, elevation in one call)*
+- "Draw the building-footprint polygon for this UPRN"
+- "What's the registered freehold title polygon containing this point?"
+- "What have flats sold for in SW1A 1AA in the last 5 years?"
+- "What's the EPC rating and construction age of this property?"
+
+**Heritage, planning and environment**
 - "Is 10 Downing Street a listed building?"
 - "List scheduled monuments within 500 m of this coordinate"
+- "Is this property inside an SSSI, AONB or Ancient Woodland?"
 - "Can a new dwelling be built at this location under NPPF?"
-- "What heritage designations affect the area around the Tower of London?"
+- "What parks and green spaces are within 500 m?"
 
-**Ground and elevation**
+**Local amenity and community**
+- "How many crimes in 500 m over the last year, broken down by type?"
+- "What are the three nearest primary schools and their Ofsted ratings?"
+- "Nearest GP practice to this postcode?"
+- "What's the Index of Multiple Deprivation decile for this LSOA?"
+
+**Ground, land and transport**
 - "What's the bedrock at 51.5014, -0.1419?"
 - "Are there any BGS borehole records within 1 km of this point?"
+- "Is this property in a Coal Authority high-risk area?"
+- "How close is this to the nearest motorway, A-road, or named river?"
 - "What's the elevation profile for this postcode area?"
 
 **Geocoding and geometry**
@@ -160,7 +171,7 @@ Free tier, rate-limited, no card required.
 ### Flood
 | Tool | Input | Returns |
 |---|---|---|
-| `flood_risk_uk` | lat, lon | EA Flood Map for Planning zone (1/2/3), source, coverage note |
+| `flood_risk_uk` | lat, lon | EA Flood Map for Planning zone (1/2/3), source; returns `coverage_gap` for points outside England rather than a false Zone 1 |
 | `flood_risk_probability_uk` | postcode | RoFRS likelihood band × property type (defended-state probabilistic risk) |
 | `surface_water_risk_uk` | lat, lon | RoFSW band (High/Medium/Low/Very Low) via EA WMS |
 | `historic_floods_uk` | lat, lon | EA Recorded Flood Outlines since 1946 — count, most recent, by source |
