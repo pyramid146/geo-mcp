@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.tools.flood_historic import historic_floods_uk
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 async def test_tewkesbury_has_multiple_recorded_floods():

@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.tools.geology import geology_uk
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 async def test_central_london_is_thames_group_on_terrace_gravels():

@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.tools.epc import _flood_re_year_signal, energy_performance_uk
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 # Pure-function tests don't touch the DB — no fixture marker needed.

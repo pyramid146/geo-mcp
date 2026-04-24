@@ -3,16 +3,9 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.tools.building import building_footprint_uk
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 async def test_downing_street_10_returns_a_building():

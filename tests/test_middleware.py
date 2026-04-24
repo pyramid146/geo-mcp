@@ -19,16 +19,9 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from geo_mcp.auth import mint_key, revoke_key
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.middleware import AuthMiddleware
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 def _make_app() -> Starlette:

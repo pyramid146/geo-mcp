@@ -15,16 +15,10 @@ from geo_mcp.auth import (
     revoke_key,
     validate_header,
 )
-from geo_mcp.data_access.postgis import close_pool, get_pool
+from geo_mcp.data_access.postgis import get_pool
 
 # asyncio_mode=auto is set in pyproject.toml, so async tests are auto-marked;
 # pure sync tests in this file stay un-marked.
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 def _test_email() -> str:

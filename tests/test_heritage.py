@@ -2,16 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.tools.heritage import heritage_nearby_uk, is_listed_building_uk
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 async def test_downing_street_is_listed_grade_i():

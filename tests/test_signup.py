@@ -11,16 +11,10 @@ import uuid
 import pytest
 
 from geo_mcp import signup as signup_mod
-from geo_mcp.data_access.postgis import close_pool, get_pool
+from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.signup import start_signup, verify_signup  # noqa: F401
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 @pytest.fixture

@@ -10,16 +10,10 @@ from __future__ import annotations
 
 import pytest
 
-from geo_mcp.data_access.postgis import close_pool, get_pool
+from geo_mcp.data_access.postgis import get_pool
 from geo_mcp.tools.inspire_polygon import title_polygon_uk
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 async def _table_exists() -> bool:

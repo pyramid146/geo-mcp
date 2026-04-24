@@ -91,3 +91,24 @@ def _cleanup_test_meta_rows():
     except Exception as exc:  # noqa: BLE001
         # Never let cleanup failure mask real test failures.
         print(f"\n[conftest] test-meta cleanup failed: {exc!r}")
+
+
+# ---------------------------------------------------------------------------
+# Per-test asyncpg pool reset.
+# ---------------------------------------------------------------------------
+# The asyncpg pool is a process-wide singleton in
+# geo_mcp.data_access.postgis. Tests running under different event
+# loops without this fixture hit "Event loop is closed" errors on the
+# second test in a file.
+#
+# Previously every test module declared its own copy. Centralised here
+# so every test file gets it via autouse. A module that deliberately
+# wants to keep the pool alive between tests can override with its own
+# fixture of the same name.
+
+
+@pytest.fixture(autouse=True)
+async def _reset_pool():
+    from geo_mcp.data_access.postgis import close_pool  # local import
+    yield
+    await close_pool()

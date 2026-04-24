@@ -12,17 +12,10 @@ import pytest
 from starlette.middleware import Middleware as ASGIMiddleware
 
 from geo_mcp import signup as signup_mod
-from geo_mcp.data_access.postgis import close_pool
 from geo_mcp.middleware import AuthMiddleware
 from geo_mcp.server import build_app
 
 pytestmark = pytest.mark.asyncio
-
-
-@pytest.fixture(autouse=True)
-async def _reset_pool():
-    yield
-    await close_pool()
 
 
 @pytest.fixture
