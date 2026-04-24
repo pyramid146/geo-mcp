@@ -13,15 +13,23 @@ from typing import Any
 _POSTCODE_RE = re.compile(r"^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$", re.IGNORECASE)
 
 
+def _is_real_number(v: Any) -> bool:
+    """True for int / float, but NOT bool — Python's bool is a subclass
+    of int, so ``isinstance(True, int)`` is True and without this
+    check a caller passing ``lat=True`` would silently land as
+    ``lat=1`` via ``ST_MakePoint(lon, 1)`` rather than erroring out."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 def validate_wgs84(lat: float, lon: float) -> dict[str, Any] | None:
     """Return an error dict if lat/lon is outside WGS84 ranges, else None.
 
     Tool convention: if this returns a dict, the caller returns it
     unchanged to the MCP caller. If None, the inputs are usable.
     """
-    if not isinstance(lat, (int, float)) or not (-90.0 <= lat <= 90.0):
+    if not _is_real_number(lat) or not (-90.0 <= lat <= 90.0):
         return {"error": "invalid_lat", "message": f"Latitude must be in [-90, 90], got {lat!r}."}
-    if not isinstance(lon, (int, float)) or not (-180.0 <= lon <= 180.0):
+    if not _is_real_number(lon) or not (-180.0 <= lon <= 180.0):
         return {"error": "invalid_lon", "message": f"Longitude must be in [-180, 180], got {lon!r}."}
     return None
 
@@ -55,7 +63,7 @@ def validate_radius_m(
     min_m: int = 1,
 ) -> dict[str, Any] | None:
     """Return an error dict if radius is outside [min_m, max_m], else None."""
-    if not isinstance(radius_m, (int, float)) or radius_m < min_m or radius_m > max_m:
+    if not _is_real_number(radius_m) or radius_m < min_m or radius_m > max_m:
         return {
             "error": "invalid_radius",
             "message": f"radius_m must be between {min_m} and {max_m}, got {radius_m!r}.",
