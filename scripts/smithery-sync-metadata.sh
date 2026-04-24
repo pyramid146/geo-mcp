@@ -42,7 +42,7 @@ EOF
 PAYLOAD=$(jq -nc \
     --arg displayName "geo-mcp" \
     --arg description "$DESCRIPTION" \
-    --arg iconUrl "https://geomcp.dev/favicon.svg" \
+    --arg iconUrl "https://geomcp.dev/icon.svg" \
     --arg homepage "https://geomcp.dev" \
     '{displayName: $displayName,
       description: $description,

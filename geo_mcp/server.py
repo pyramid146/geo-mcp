@@ -204,6 +204,17 @@ Quote the `attribution` strings from each tool response in the final output (OGL
             headers={"Cache-Control": "public, max-age=86400"},
         )
 
+    @app.custom_route("/icon.svg", methods=["GET"])
+    async def icon_card(_: Request) -> HTMLResponse:
+        # Self-contained logo for directory listings (Smithery, PulseMCP,
+        # etc.) — bakes in cream background + ink strokes so the mark
+        # survives on dark-themed catalogue cards.
+        return HTMLResponse(
+            _MARK_SVG_CARD,
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=86400"},
+        )
+
     @app.custom_route("/signup", methods=["GET"])
     async def signup_form(_: Request) -> HTMLResponse:
         return HTMLResponse(_PAGE_SIGNUP_FORM)
@@ -526,6 +537,33 @@ _MARK_SVG_MONO = """\
   </g>
   <circle cx="60" cy="60" r="3" fill="currentColor"/>
   <circle cx="60" cy="60" r="7" fill="none" stroke="currentColor" stroke-width="1.2"/>
+</svg>
+"""
+
+# Self-contained logo for EXTERNAL surfaces (directory listings, social
+# cards, OG images). Unlike the two above, this version bakes in its own
+# cream background + ink strokes rather than inheriting ``currentColor``.
+# Needed because external catalogues (Smithery, PulseMCP) render on dark
+# themes where ``currentColor`` resolves to nothing and the mark vanishes.
+_MARK_SVG_CARD = """\
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" aria-label="geo-mcp">
+  <rect x="0" y="0" width="120" height="120" rx="18" ry="18" fill="#f5f1e8"/>
+  <rect x="22" y="22" width="76" height="76" fill="none" stroke="#0f1419" stroke-width="2.2"/>
+  <g stroke="#0f1419" stroke-width="0.8" opacity="0.35">
+    <line x1="22" y1="47.3" x2="98" y2="47.3"/>
+    <line x1="22" y1="72.6" x2="98" y2="72.6"/>
+    <line x1="47.3" y1="22" x2="47.3" y2="98"/>
+    <line x1="72.6" y1="22" x2="72.6" y2="98"/>
+  </g>
+  <rect x="47.3" y="47.3" width="25.3" height="25.3" fill="#0f1419" opacity="0.08"/>
+  <g stroke="#0f1419" stroke-width="1.6">
+    <line x1="60" y1="16" x2="60" y2="22"/>
+    <line x1="60" y1="98" x2="60" y2="104"/>
+    <line x1="16" y1="60" x2="22" y2="60"/>
+    <line x1="98" y1="60" x2="104" y2="60"/>
+  </g>
+  <circle cx="60" cy="60" r="3" fill="#b5603a"/>
+  <circle cx="60" cy="60" r="7" fill="none" stroke="#b5603a" stroke-width="1.2"/>
 </svg>
 """
 

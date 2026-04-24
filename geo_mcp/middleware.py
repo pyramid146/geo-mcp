@@ -41,7 +41,7 @@ current_auth: ContextVar[AuthContext | None] = ContextVar("current_auth", defaul
 # endpoints — those *are* what mints a key, so can't require one.
 _PUBLIC_PATHS: frozenset[str] = frozenset({
     "/", "/health", "/status", "/status.json", "/privacy",
-    "/signup", "/signup/verify", "/favicon.svg",
+    "/signup", "/signup/verify", "/favicon.svg", "/icon.svg",
     # OAuth 2.1 endpoints — users hit /authorize in a browser before
     # they have a token; /token and /register are called by clients
     # that don't yet have one. The endpoints do their own auth (PKCE,
