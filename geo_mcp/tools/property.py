@@ -68,20 +68,31 @@ async def property_lookup_uk(uprn: int | str) -> dict[str, Any]:
           "lat": 51.50101,
           "lon": -0.14156,
           "osgb": {"easting": 530023.0, "northing": 179957.0},
-          "admin": {
+          "admin": {                              # the full reverse_geocode_uk
+                                                  # response, nested as-is:
               "postcode": "SW1A 2AA",
-              "distance_to_postcode_centroid_m": 12.7,
-              "country":          {"code": "E92000001", "name": "England"},
-              "region":           {"code": "E12000007", "name": "London"},
-              "local_authority":  {"code": "E09000033", "name": "City of Westminster"},
-              "ward":             {"code": "...",       "name": "..."},
-              "lsoa":             {"code": "...",       "name": null},
-              "msoa":             {"code": "...",       "name": null},
-              "geology":          {...},
-          },
+              "pcd7": "SW1A2AA",
+              "distance_m": 12.7,
+              "admin": {
+                  "country":         {"code": "E92000001", "name": "England"},
+                  "region":          {"code": "E12000007", "name": "London"},
+                  "local_authority": {"code": "E09000033", "name": "City of Westminster"},
+                  "ward":            {"code": "...",       "name": "..."},
+                  "lsoa":            {"code": "...",       "name": null},
+                  "msoa":            {"code": "...",       "name": null}
+              },
+              "geology":     {...},
+              "source":      "ONSPD + OS Boundary-Line + BGS Geology 625k",
+              "attribution": "..."
+          } | null,                               # null if reverse geocode fails
           "source": "OS Open UPRN",
           "attribution": "..."
         }
+
+    Note the **nested** ``admin.admin`` shape — ``admin`` here is the entire
+    ``reverse_geocode_uk`` response, whose own ``admin`` key holds the
+    country / region / local-authority / ward breakdown. Reach through as
+    ``response["admin"]["admin"]["local_authority"]["name"]``.
 
     On invalid or unknown UPRN returns ``{"error": ..., "message": ...}``.
     """
