@@ -46,7 +46,13 @@ _PUBLIC_PATHS: frozenset[str] = frozenset({
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
-    """Validate ``Authorization: Bearer <key>`` per request.
+    """Validate the API key on every request.
+
+    Accepts either ``Authorization: Bearer <key>`` (canonical) or
+    ``X-API-Key: <key>`` (raw key, no scheme prefix). The second form
+    exists for MCP hosting platforms whose config UIs don't let a user
+    add a scheme prefix to their secret — e.g. Smithery's header-value
+    field — so we provide an idiomatic header that takes the key verbatim.
 
     Public paths in ``_PUBLIC_PATHS`` bypass auth — they must not leak
     anything an unauthenticated caller shouldn't see.
@@ -57,10 +63,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         authorization = request.headers.get("authorization")
-        ctx = await validate_header(authorization)
+        x_api_key = request.headers.get("x-api-key")
+        ctx = await validate_header(authorization, x_api_key)
         if ctx is None:
             return JSONResponse(
-                {"error": "unauthorized", "message": "Missing or invalid Bearer API key."},
+                {"error": "unauthorized", "message": "Missing or invalid API key. Provide Authorization: Bearer <key> or X-API-Key: <key>."},
                 status_code=401,
                 headers={"WWW-Authenticate": 'Bearer realm="geo-mcp"'},
             )

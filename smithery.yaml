@@ -29,6 +29,6 @@ startCommand:
       type: "http",
       url: "https://geomcp.dev/mcp",
       headers: {
-        "Authorization": `Bearer ${config.apiKey}`
+        "X-API-Key": config.apiKey
       }
     })

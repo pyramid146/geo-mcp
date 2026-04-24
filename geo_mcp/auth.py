@@ -108,24 +108,10 @@ async def mint_key(email: str, label: str | None = None) -> tuple[str, dict[str,
     }
 
 
-async def validate_header(authorization: str | None) -> AuthContext | None:
-    """Parse ``Authorization: Bearer <key>``, look up by hash, return the
-    auth context or None. No ``last_used_at`` update here — that's done
-    lazily by ``record_usage`` so protocol-level pings don't produce writes.
-
-    When a pepper is configured, checks both the peppered (current) and
-    legacy (plain SHA-256) hashes so keys minted before the pepper was
-    introduced continue to work.
-    """
-    if not authorization:
-        return None
-    parts = authorization.split()
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        return None
-    raw = parts[1]
-
-    # Try the canonical hash first; if that misses and a pepper is in
-    # use, try the legacy plain-SHA256 hash as a backwards-compat fallback.
+async def _lookup_raw_key(raw: str) -> AuthContext | None:
+    """DB lookup for a plaintext key. Tries the canonical hash first and
+    falls back to the legacy plain-SHA256 hash if a pepper is configured,
+    so keys minted before the pepper was introduced continue to work."""
     candidates = [hash_key(raw)]
     if _KEY_PEPPER:
         candidates.append(_legacy_hash_key(raw))
@@ -145,6 +131,37 @@ async def validate_header(authorization: str | None) -> AuthContext | None:
     if row is None:
         return None
     return AuthContext(api_key_id=row["id"], customer_id=row["customer_id"], tier=row["tier"])
+
+
+async def validate_header(
+    authorization: str | None,
+    x_api_key: str | None = None,
+) -> AuthContext | None:
+    """Validate a bearer token from either the ``Authorization`` header
+    (``Bearer <key>``) or the simpler ``X-API-Key: <key>`` header.
+
+    Return the auth context or None. No ``last_used_at`` update here —
+    that's done lazily by ``record_usage`` so protocol-level pings don't
+    produce writes.
+
+    The two-header support matters because downstream MCP clients
+    (Smithery's hosted runner, for example) may not expose a way to
+    add the literal ``Bearer`` prefix to a user-supplied secret; offering
+    ``X-API-Key`` lets those clients pass the raw key verbatim.
+    """
+    # Try Authorization: Bearer <key> first (canonical).
+    if authorization:
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            ctx = await _lookup_raw_key(parts[1])
+            if ctx is not None:
+                return ctx
+
+    # Fall back to X-API-Key (no scheme prefix — just the raw key).
+    if x_api_key and x_api_key.strip():
+        return await _lookup_raw_key(x_api_key.strip())
+
+    return None
 
 
 async def record_usage(

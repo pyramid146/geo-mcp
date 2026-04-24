@@ -51,7 +51,9 @@ async def _call(app: Starlette, headers: dict[str, str] | None = None) -> httpx.
 async def test_missing_authorization_header_returns_401():
     r = await _call(_make_app())
     assert r.status_code == 401
-    assert r.json() == {"error": "unauthorized", "message": "Missing or invalid Bearer API key."}
+    body = r.json()
+    assert body["error"] == "unauthorized"
+    assert "API key" in body["message"]
     assert r.headers.get("WWW-Authenticate", "").startswith("Bearer")
 
 
@@ -138,4 +140,68 @@ async def test_case_insensitive_bearer_scheme():
     email = f"test-mw-{uuid.uuid4()}@example.test"
     raw, _ = await mint_key(email=email, label="middleware case")
     r = await _call(_make_app(), headers={"Authorization": f"bearer {raw}"})
+    assert r.status_code == 200
+
+
+async def test_x_api_key_header_reaches_handler():
+    # Some MCP hosting UIs (e.g. Smithery) can only forward a raw header
+    # value with no scheme prefix. X-API-Key takes the raw key verbatim.
+    email = f"test-mw-{uuid.uuid4()}@example.test"
+    raw, _ = await mint_key(email=email, label="middleware x-api-key")
+    r = await _call(_make_app(), headers={"X-API-Key": raw})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+async def test_unknown_x_api_key_returns_401():
+    r = await _call(
+        _make_app(),
+        headers={"X-API-Key": "gmcp_live_totally_not_a_real_key_please_ignore"},
+    )
+    assert r.status_code == 401
+
+
+async def test_revoked_x_api_key_returns_401():
+    email = f"test-mw-{uuid.uuid4()}@example.test"
+    raw, meta = await mint_key(email=email, label="middleware x-api-key revoked")
+    ok = await revoke_key(meta["key_id"])
+    assert ok is True
+    r = await _call(_make_app(), headers={"X-API-Key": raw})
+    assert r.status_code == 401
+
+
+async def test_empty_x_api_key_header_returns_401():
+    r = await _call(_make_app(), headers={"X-API-Key": ""})
+    assert r.status_code == 401
+
+
+async def test_x_api_key_with_surrounding_whitespace_still_validates():
+    # Some config UIs wrap pasted values in whitespace. Tolerate it.
+    email = f"test-mw-{uuid.uuid4()}@example.test"
+    raw, _ = await mint_key(email=email, label="middleware x-api-key whitespace")
+    r = await _call(_make_app(), headers={"X-API-Key": f"  {raw}  "})
+    assert r.status_code == 200
+
+
+async def test_bearer_wins_when_both_headers_present():
+    # If a client sends both, a valid Authorization header should be
+    # enough to authenticate — even if X-API-Key is nonsense.
+    email = f"test-mw-{uuid.uuid4()}@example.test"
+    raw, _ = await mint_key(email=email, label="middleware both headers")
+    r = await _call(
+        _make_app(),
+        headers={"Authorization": f"Bearer {raw}", "X-API-Key": "garbage"},
+    )
+    assert r.status_code == 200
+
+
+async def test_x_api_key_used_when_authorization_invalid():
+    # If Authorization is present but malformed (wrong scheme, empty
+    # token, ...), X-API-Key should still be accepted as a fallback.
+    email = f"test-mw-{uuid.uuid4()}@example.test"
+    raw, _ = await mint_key(email=email, label="middleware fallback")
+    r = await _call(
+        _make_app(),
+        headers={"Authorization": "Basic notbearer", "X-API-Key": raw},
+    )
     assert r.status_code == 200
