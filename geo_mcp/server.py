@@ -103,6 +103,90 @@ def build_app() -> FastMCP:
     app.tool(gp_practices_nearby_uk)
     app.tool(title_polygon_uk)
 
+    # -----------------------------------------------------------------
+    # Prompts — reusable templates that chain tools into a coherent
+    # workflow. Agents that don't naturally plan multi-tool sequences
+    # can call one of these to get the exact tool order + synthesis
+    # instructions for a common use-case (site brief, flood workup,
+    # property due-diligence). Also satisfies the "capability breadth"
+    # dimension of catalogue quality scores.
+    # -----------------------------------------------------------------
+
+    @app.prompt(
+        name="uk_site_brief",
+        description=(
+            "One-shot UK site brief for a given postcode. Chains geocoding, "
+            "flood, heritage, environmental designations, schools, crime, "
+            "and geology into a single synthesis. Ideal for residential "
+            "purchase, commercial lease, planning application screens, "
+            "or insurance underwriting."
+        ),
+    )
+    def uk_site_brief(
+        postcode: str,
+        purpose: str = "residential_purchase",
+    ) -> str:
+        """Return a prompt that guides the LLM through a canonical site-brief."""
+        return f"""Produce a concise UK site brief for postcode **{postcode}** in the context of **{purpose}**.
+
+Call these tools in order (ignore any that return coverage_gap — note the gap in the brief):
+
+1. `geocode_uk` — resolve the postcode to (lat, lon)
+2. `flood_risk_summary_uk` — composite flood verdict (EA zones, RoFRS, surface water, historic, NPPF)
+3. `flood_re_eligibility_uk` — whether the property qualifies for the UK flood-insurance pool
+4. `heritage_nearby_uk` — listed buildings, scheduled monuments, registered parks (500m)
+5. `designated_sites_nearby_uk` — SSSI, AONB, SAC, SPA, Ramsar, NNR, LNR, Ancient Woodland
+6. `crime_nearby_uk` — police.uk street-level, last 6 months, 500m
+7. `schools_nearby_uk` — DfE GIAS + Ofsted, 1500m
+8. `gp_practices_nearby_uk` — NHS ODS, 2000m
+9. `deprivation_uk` — IMD 2019 decile (1=most deprived, 10=least)
+10. `coal_mining_risk_uk` — Coal Authority planning-risk verdict (England only)
+11. `geology_uk` — BGS 625k bedrock/superficial
+12. `elevation_summary_uk` — OS Terrain 50 summary in a 500m box
+
+Then synthesise a one-page brief with:
+
+- **Headline risk**: flood verdict + coal verdict + heritage constraints
+- **Neighbourhood quality**: crime volume/trend, nearest schools with Ofsted, GP coverage, IMD decile
+- **Physical setting**: elevation summary, geology, any designated sites
+- **Planning flags**: NPPF sequential/exception test trigger, listed-building proximity, conservation area
+- **Data gaps**: any tool that returned coverage_gap — explain which parts of GB/UK the dataset covers
+
+Keep it scannable. Use the per-response `attribution` strings verbatim at the bottom (OGLv3 requirement). Don't speculate beyond what the tools returned.
+"""
+
+    @app.prompt(
+        name="uk_flood_diligence",
+        description=(
+            "Focused flood-risk workup for a UK address. Runs the five "
+            "canonical flood tools and synthesises a risk statement + "
+            "NPPF planning implications + insurance angle."
+        ),
+    )
+    def uk_flood_diligence(postcode: str) -> str:
+        return f"""Produce a UK flood-risk workup for postcode **{postcode}**.
+
+Chain these tools (all coverage is England-only for EA sources; note gaps for Wales/Scotland):
+
+1. `geocode_uk` → (lat, lon)
+2. `flood_risk_uk` — current EA Flood Map zone (1 / 2 / 3a / 3b)
+3. `flood_risk_probability_uk` — RoFRS band (High / Medium / Low / Very Low)
+4. `surface_water_risk_uk` — pluvial / surface water WMS
+5. `historic_floods_uk` — recorded historic flood events at the location
+6. `nppf_planning_context_uk` — whether the NPPF Sequential/Exception Test is triggered
+7. `flood_re_eligibility_uk` — Flood Re insurance-pool eligibility
+
+Return a brief with:
+
+- **Headline**: single sentence "low / medium / high fluvial + surface water risk"
+- **Planning**: if NPPF triggers, what the applicant would need (FRA, mitigation)
+- **Insurance**: Flood Re yes/no + reasons
+- **Historic**: any recorded floods and dates
+- **Gaps**: if the postcode is in Wales/Scotland/NI, flag the EA-dataset coverage gap
+
+Quote the `attribution` strings from each tool response in the final output (OGLv3).
+"""
+
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
         # Live tool count keeps marketing copy in sync with what's

@@ -24,7 +24,20 @@ if [[ -z "$TOKEN" ]]; then
     exit 1
 fi
 
-DESCRIPTION='Hosted UK geospatial MCP server. 33 tools covering flood risk, property records (UPRN, EPC, price-paid), heritage designations, Natural England SSSI / AONB, crime (police.uk), coal mining, schools (GIAS), NHS GPs, elevation, and geocoding. OGLv3 data, free tier.'
+read -r -d '' DESCRIPTION <<'EOF' || true
+UK-specialist MCP server that lets an LLM agent answer location-grounded questions it otherwise cant — floods, property, heritage, environmental designations, geology, crime, schools, healthcare, elevation, geocoding. Built on current UK open-data sources rather than the model training corpus.
+
+33 tools covering:
+
+• Flood: EA Flood Map (planning zones 1/2/3), RoFRS risk band, surface water (WMS), historic events, NPPF sequential/exception test trigger, Flood Re eligibility, composite verdict
+• Property: UPRN resolver + OS Zoomstack building footprint, HMLR INSPIRE title polygon (24M+ freehold titles), EPC certificate, HMLR price-paid history, one-call property due-diligence report
+• Heritage + environment: Historic England listed buildings, scheduled monuments, registered parks/gardens; Natural England SSSI/SAC/SPA/Ramsar/NNR/LNR/AONB/Ancient Woodland; OS Open Greenspace
+• Community: Police.uk street-level crime with trend, DfE GIAS schools + Ofsted ratings, NHS ODS GP practices, IMD 2019 deprivation decile
+• Ground: BGS Geology 625k bedrock/superficial, GeoIndex borehole logs, Coal Authority planning-risk verdict
+• Geometry: OS OpenNames + ONSPD geocoding, OS Terrain 50 elevation, OS Open Rivers/Roads proximity, distance + CRS projection
+
+Hosted at geomcp.dev. Free tier via email signup (no card). OGLv3 data with per-response attribution. MIT-licensed code.
+EOF
 
 PAYLOAD=$(jq -nc \
     --arg displayName "geo-mcp" \
