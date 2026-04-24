@@ -16,7 +16,7 @@ licence terms, or are hacking on the code.
 ## Quickstart
 
 ```bash
-git clone <repo> && cd geo-mcp
+git clone https://github.com/pyramid146/geo-mcp.git && cd geo-mcp
 cp .env.example .env     # fill in passwords; never commit .env
 docker compose up -d postgis
 ./scripts/migrate.sh

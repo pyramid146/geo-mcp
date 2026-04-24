@@ -4,6 +4,8 @@ A **UK geospatial MCP server** for LLM agents. 33 tools covering flood risk, pro
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
+🌐 **Hosted at [geomcp.dev](https://geomcp.dev)** — get a free API key at <https://geomcp.dev/signup> and point your MCP client at `https://geomcp.dev/mcp`. Running your own instance is also supported; see [DEVELOPMENT.md](./DEVELOPMENT.md).
+
 ---
 
 ## What you can ask

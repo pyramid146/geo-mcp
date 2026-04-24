@@ -612,6 +612,7 @@ document.addEventListener('click', e => {
     <a class="logo" href="/">{_MARK_SVG_MONO}<span>geo-mcp</span></a>
     <nav class="site-nav">
       <a href="/signup">Sign up</a>
+      <a href="https://github.com/pyramid146/geo-mcp">Source</a>
       <a href="/status">Status</a>
     </nav>
   </div>
@@ -621,7 +622,7 @@ document.addEventListener('click', e => {
 </main>
 <footer class="site-footer">
   <div class="container">
-    <span>UK open-data MCP server · OGLv3 · MIT-licensed code</span>
+    <span>UK open-data MCP server · OGLv3 · MIT-licensed code · <a href="https://github.com/pyramid146/geo-mcp">github.com/pyramid146/geo-mcp</a></span>
     <span>geomcp.dev</span>
   </div>
 </footer>{copy_js}
