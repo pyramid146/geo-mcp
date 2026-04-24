@@ -59,7 +59,14 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next):
-        if request.url.path in _PUBLIC_PATHS:
+        path = request.url.path
+        # Let /.well-known/* through unauthenticated. MCP hosting scanners
+        # probe these for discovery metadata (e.g. server-card.json,
+        # oauth-protected-resource). If they see 401 here, they assume the
+        # server requires OAuth / hide behind auth, and never fall back to
+        # the configSchema-based header auth we actually use. We don't
+        # serve anything under /.well-known/, so these just 404 cleanly.
+        if path in _PUBLIC_PATHS or path.startswith("/.well-known/"):
             return await call_next(request)
 
         authorization = request.headers.get("authorization")

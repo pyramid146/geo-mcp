@@ -197,6 +197,20 @@ async def test_bearer_wins_when_both_headers_present():
     assert r.status_code == 200
 
 
+async def test_well_known_paths_bypass_auth():
+    # MCP hosting scanners probe /.well-known/* for discovery metadata.
+    # If auth returns 401 here, they assume the server requires OAuth
+    # and never fall back to configSchema-based header auth. We don't
+    # serve anything under /.well-known/, so we want a clean 404 — not a
+    # 401 that changes the scanner's behaviour.
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=_make_app()),
+        base_url="http://t",
+    ) as c:
+        r = await c.get("/.well-known/mcp/server-card.json")
+    assert r.status_code == 404  # Starlette's default, not our 401
+
+
 async def test_x_api_key_used_when_authorization_invalid():
     # If Authorization is present but malformed (wrong scheme, empty
     # token, ...), X-API-Key should still be accepted as a fallback.
