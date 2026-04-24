@@ -6,6 +6,7 @@ Police Scotland doesn't contribute.
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from geo_mcp.data_access.postgis import get_pool

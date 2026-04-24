@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import uuid
 
-import pytest
-
 from geo_mcp.auth import (
     KEY_NAMESPACE,
     generate_key,
@@ -134,7 +132,7 @@ def test_hash_key_with_pepper_differs_from_legacy(monkeypatch):
     from geo_mcp import auth as auth_mod
     monkeypatch.setattr(auth_mod, "_KEY_PEPPER", b"secret-pepper-value")
     peppered = auth_mod.hash_key("gmcp_live_sample")
-    legacy = auth_mod._legacy_hash_key("gmcp_live_sample")
+    legacy = auth_mod.legacy_hash_key("gmcp_live_sample")
     assert peppered != legacy
     # Both are sha256-hex, so same length
     assert len(peppered) == len(legacy) == 64

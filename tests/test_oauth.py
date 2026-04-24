@@ -35,15 +35,21 @@ def _pkce_pair() -> tuple[str, str]:
 
 
 async def _client():
-    # FastMCP's build_app returns a FastMCP instance. The underlying ASGI
-    # app is what we want for httpx.ASGITransport.
+    """Build a test client that talks to the real ASGI app.
+
+    GEO_MCP_PUBLIC_BASE_URL matches the httpx base_url so the CSRF
+    Origin check on POST /oauth/authorize accepts requests from this
+    fake origin. Real browsers always attach Origin; httpx does not,
+    so we also set a headers default on the client itself below."""
+    import os as _os
+    _os.environ["GEO_MCP_PUBLIC_BASE_URL"] = "http://t"
     app = build_app()
-    # Construct the HTTP ASGI application.
     asgi = app.http_app()
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=asgi),
         base_url="http://t",
         follow_redirects=False,
+        headers={"Origin": "http://t"},
     )
 
 
@@ -121,6 +127,95 @@ async def test_register_client_rejects_javascript_scheme():
             "redirect_uris": ["javascript:alert(1)"],
         })
     assert r.status_code == 400
+
+
+async def test_register_client_rejects_cleartext_http_non_loopback():
+    async with await _client() as c:
+        r = await c.post("/oauth/register", json={
+            "client_name": "test-oauth-cleartext",
+            "redirect_uris": ["http://attacker.test/cb"],
+        })
+    assert r.status_code == 400
+
+
+async def test_register_client_rejects_userinfo_in_uri():
+    # https://user:pass@host — an opaque credential-smuggling vector.
+    async with await _client() as c:
+        r = await c.post("/oauth/register", json={
+            "client_name": "test-oauth-userinfo",
+            "redirect_uris": ["https://user:pass@example.test/cb"],
+        })
+    assert r.status_code == 400
+
+
+async def test_register_client_accepts_http_localhost():
+    # Native + CLI dev flows (Claude Desktop's loopback callback, etc.)
+    # legitimately use http://localhost. Must stay allowed.
+    async with await _client() as c:
+        r = await c.post("/oauth/register", json={
+            "client_name": "test-oauth-localhost",
+            "redirect_uris": ["http://localhost:8765/cb"],
+        })
+    assert r.status_code == 201
+
+
+async def test_register_client_rejects_control_chars_in_name():
+    async with await _client() as c:
+        r = await c.post("/oauth/register", json={
+            "client_name": "test-oauth-\x1b[31mBAD",
+            "redirect_uris": ["https://example.test/cb"],
+        })
+    assert r.status_code == 400
+
+
+async def test_token_exchange_cap_stops_oauth_key_farming():
+    """Per-customer cap on oauth:* keys — C2 in the security review."""
+    from geo_mcp import oauth as oauth_mod
+    # Make the cap easily hit in a test without really minting 20 keys.
+    # monkeypatch doesn't play with module-level consts cleanly; replace
+    # the attribute and restore below.
+    original = oauth_mod._MAX_OAUTH_KEYS_PER_CUSTOMER
+    oauth_mod._MAX_OAUTH_KEYS_PER_CUSTOMER = 2
+    try:
+        async with await _client() as c:
+            # Same email across all flows → same customer.
+            email = f"test-oauth-cap-{uuid.uuid4()}@example.test"
+            granter, _ = await mint_key(email=email, label="cap test granter")
+            reg = await register_client({
+                "client_name": "test-oauth-cap",
+                "redirect_uris": ["https://example.test/cb"],
+            })
+
+            async def _mint_via_oauth() -> int:
+                verifier, challenge = _pkce_pair()
+                r = await c.post("/oauth/authorize", data={
+                    "response_type": "code",
+                    "client_id": reg.client_id,
+                    "redirect_uri": "https://example.test/cb",
+                    "code_challenge": challenge,
+                    "code_challenge_method": "S256",
+                    "api_key": granter,
+                })
+                if r.status_code != 302:
+                    return r.status_code
+                code = parse_qs(urlparse(r.headers["location"]).query)["code"][0]
+                tr = await c.post("/oauth/token", data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": "https://example.test/cb",
+                    "client_id": reg.client_id,
+                    "code_verifier": verifier,
+                })
+                return tr.status_code
+
+            # First two succeed (cap = 2 total oauth keys; plus the
+            # granter which is NOT labelled oauth:*, so doesn't count).
+            assert await _mint_via_oauth() == 200
+            assert await _mint_via_oauth() == 200
+            # Third hits the cap.
+            assert await _mint_via_oauth() == 400
+    finally:
+        oauth_mod._MAX_OAUTH_KEYS_PER_CUSTOMER = original
 
 
 async def test_register_client_rejects_too_many_redirect_uris():
@@ -252,6 +347,54 @@ async def test_authorize_post_rerenders_on_bad_key():
     # 400 with the consent form re-rendered (error visible on page).
     assert r.status_code == 400
     assert "api_key" in r.text
+
+
+async def test_authorize_post_blocks_cross_origin():
+    """CSRF defence — POST from a foreign origin must be rejected even
+    if all other parameters and the API key are valid. This is the
+    single most important security property of the consent endpoint."""
+    reg = await register_client({
+        "client_name": "test-oauth-csrf",
+        "redirect_uris": ["https://example.test/cb"],
+    })
+    email = f"test-oauth-{uuid.uuid4()}@example.test"
+    raw_key, _ = await mint_key(email=email, label="oauth test csrf")
+    _, challenge = _pkce_pair()
+    async with await _client() as c:
+        r = await c.post("/oauth/authorize",
+                         headers={"Origin": "https://attacker.test"},
+                         data={
+            "response_type": "code",
+            "client_id": reg.client_id,
+            "redirect_uri": "https://example.test/cb",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "api_key": raw_key,
+        })
+    assert r.status_code == 403
+
+
+async def test_authorize_post_blocks_missing_origin():
+    """No Origin AND no Referer → block. Legit browsers always send at
+    least one of these on form POSTs."""
+    reg = await register_client({
+        "client_name": "test-oauth-noorigin",
+        "redirect_uris": ["https://example.test/cb"],
+    })
+    _, challenge = _pkce_pair()
+    # Strip the default Origin header by overriding with an empty one.
+    async with await _client() as c:
+        r = await c.post("/oauth/authorize",
+                         headers={"Origin": "", "Referer": ""},
+                         data={
+            "response_type": "code",
+            "client_id": reg.client_id,
+            "redirect_uri": "https://example.test/cb",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "api_key": "ignored",
+        })
+    assert r.status_code == 403
 
 
 async def test_authorize_post_missing_key_rerenders():
@@ -420,6 +563,60 @@ async def test_token_rejects_missing_pkce_verifier():
         })
     assert r.status_code == 400
     assert r.json()["error"] == "invalid_request"
+
+
+async def test_token_response_omits_expires_in():
+    """We deliberately don't send expires_in — access tokens are
+    long-lived API keys; advertising a TTL misleads well-behaved
+    clients into a pointless re-auth dance."""
+    async with await _client() as c:
+        reg, verifier, code = await _get_code(c, "test-oauth-noexpiry",
+                                              "https://example.test/cb")
+        r = await c.post("/oauth/token", data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "https://example.test/cb",
+            "client_id": reg.client_id,
+            "code_verifier": verifier,
+        })
+    assert r.status_code == 200
+    assert "expires_in" not in r.json()
+
+
+async def test_revoke_endpoint_revokes_token():
+    from geo_mcp.auth import validate_header
+    async with await _client() as c:
+        reg, verifier, code = await _get_code(c, "test-oauth-revoke",
+                                              "https://example.test/cb")
+        tr = await c.post("/oauth/token", data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "https://example.test/cb",
+            "client_id": reg.client_id,
+            "code_verifier": verifier,
+        })
+        assert tr.status_code == 200
+        token = tr.json()["access_token"]
+
+        # Pre-revoke: validates.
+        assert await validate_header(f"Bearer {token}", None) is not None
+
+        rv = await c.post("/oauth/revoke", data={"token": token})
+        assert rv.status_code == 200
+        # RFC 7009 §2.2 — unknown/revoked tokens still return 200 so
+        # attackers can't probe token existence.
+        assert rv.headers.get("cache-control") == "no-store"
+
+        # Post-revoke: no longer validates.
+        assert await validate_header(f"Bearer {token}", None) is None
+
+
+async def test_revoke_unknown_token_still_200():
+    """RFC 7009 §2.2 — the endpoint must return 200 for unknown tokens
+    so attackers can't use response codes to probe which tokens exist."""
+    async with await _client() as c:
+        r = await c.post("/oauth/revoke", data={"token": "gmcp_live_never_existed"})
+    assert r.status_code == 200
 
 
 async def test_token_minted_key_validates_as_bearer():

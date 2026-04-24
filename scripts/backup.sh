@@ -36,6 +36,15 @@ reap_out=$(psql -h 127.0.0.1 -p 5432 -U mcp_admin -d "$POSTGRES_DB" -tAc \
     | wc -l)
 echo "[backup] pending_signups reaped: ${reap_out}"
 
+# Reap expired OAuth authorization codes. Codes are 10-min TTL and
+# single-use, but failed redeems + DoS floods can leave stale rows
+# indefinitely. Nightly cleanup keeps the table bounded.
+echo "[backup] reaping expired oauth_auth_codes"
+oauth_reap=$(psql -h 127.0.0.1 -p 5432 -U mcp_admin -d "$POSTGRES_DB" -tAc \
+    "DELETE FROM meta.oauth_auth_codes WHERE expires_at < now() - interval '1 hour' RETURNING code" \
+    | wc -l)
+echo "[backup] oauth_auth_codes reaped: ${oauth_reap}"
+
 echo "[backup] dumping meta schema → ${OUT}"
 pg_dump \
     -h 127.0.0.1 -p 5432 \

@@ -42,10 +42,12 @@ import hmac
 import html
 import logging
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from urllib.parse import urlparse
 
 from geo_mcp.auth import lookup_raw_key, mint_key
 from geo_mcp.data_access.postgis import get_pool
@@ -56,6 +58,17 @@ AUTH_CODE_TTL = timedelta(minutes=10)
 _CODE_BYTES = 32           # → 43 url-safe base64 chars
 _CLIENT_ID_BYTES = 24      # → 32 url-safe base64 chars
 _MAX_REDIRECT_URIS = 10    # cap per client to prevent registration abuse
+
+# Cap active (non-revoked) oauth-minted keys per customer. Prevents a
+# single compromised API key from being spun into an arbitrary number
+# of durable child keys before the user notices the breach.
+_MAX_OAUTH_KEYS_PER_CUSTOMER = 20
+
+# Only A–Z a–z 0–9 plus a small punctuation set — rejects control chars
+# (which could mangle log output when embedded in ``oauth:<name>``
+# labels) and dedicated separators (commas, pipes). Matches RFC 7591
+# guidance that display names be printable text.
+_CLIENT_NAME_RE = re.compile(r"^[A-Za-z0-9 _./+()\-]{1,64}$")
 
 
 # ---------------------------------------------------------------------------
@@ -93,11 +106,13 @@ def oauth_authorization_server_metadata() -> dict[str, Any]:
         "authorization_endpoint": f"{base}/oauth/authorize",
         "token_endpoint": f"{base}/oauth/token",
         "registration_endpoint": f"{base}/oauth/register",
+        "revocation_endpoint": f"{base}/oauth/revoke",
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code"],
         "code_challenge_methods_supported": ["S256"],
         # Public clients — no client_secret — PKCE carries the security.
         "token_endpoint_auth_methods_supported": ["none"],
+        "revocation_endpoint_auth_methods_supported": ["none"],
         "scopes_supported": ["mcp"],
     }
 
@@ -116,19 +131,36 @@ class ClientRegistration:
 
 
 def _validate_redirect_uri(uri: str) -> bool:
-    """Reject schemes we never want to redirect users to (javascript:,
-    data:, file:). We also require a scheme — bare paths aren't valid
-    OAuth redirect URIs. Per RFC 8252 both https:// and custom-scheme
-    (mobile) URIs are legitimate."""
+    """Strict whitelist per RFC 8252:
+
+      * ``https://`` — production web apps.
+      * ``http://localhost`` / ``http://127.0.0.1`` (+ port) — native +
+        CLI dev flows that spin up a transient loopback listener.
+      * Non-``http(s)`` custom schemes (e.g. ``myapp://`` for mobile).
+
+    Rejects: ``http://anything-else`` (cleartext traffic to non-loopback
+    hosts), ``userinfo@`` (opaque cred smuggling), and script-capable
+    schemes (``javascript:``, ``data:``, ``vbscript:``, ``file:``,
+    ``about:``). Length-capped at 2kB — any longer is abuse, not
+    legitimate OAuth.
+    """
     if not uri or len(uri) > 2048:
         return False
-    lowered = uri.lower().strip()
-    if "://" not in lowered:
+    try:
+        u = urlparse(uri.strip())
+    except ValueError:
         return False
-    scheme = lowered.split("://", 1)[0]
-    banned = {"javascript", "data", "file", "vbscript", "about"}
-    if scheme in banned:
+    if not u.scheme or not u.netloc and u.scheme in ("http", "https"):
         return False
+    if u.username or u.password:
+        return False
+    banned_schemes = {"javascript", "data", "file", "vbscript", "about"}
+    if u.scheme.lower() in banned_schemes:
+        return False
+    if u.scheme.lower() == "http":
+        host = (u.hostname or "").lower()
+        if host not in ("localhost", "127.0.0.1", "::1"):
+            return False
     return True
 
 
@@ -148,8 +180,11 @@ async def register_client(metadata: dict[str, Any]) -> ClientRegistration:
 
     client_name = metadata.get("client_name")
     if client_name is not None:
-        if not isinstance(client_name, str) or len(client_name) > 200:
-            raise ValueError("invalid client_name")
+        if not isinstance(client_name, str) or not _CLIENT_NAME_RE.fullmatch(client_name):
+            raise ValueError(
+                "invalid client_name (1–64 chars, letters/digits/"
+                "spaces/._+()/ - only)"
+            )
 
     client_id = secrets.token_urlsafe(_CLIENT_ID_BYTES)
 
@@ -336,30 +371,47 @@ async def exchange_code_for_token(
 
     pool = await get_pool()
     async with pool.acquire() as conn, conn.transaction():
-        # Single-use: DELETE ... RETURNING so a replay hits a 0-row result.
-        # Hitting an expired/used code and a never-issued code are
-        # indistinguishable in the response (generic invalid_grant) to
-        # avoid leaking code existence.
+        # Validate first, THEN consume the code. If we deleted on any
+        # validation failure (client_id / redirect_uri / PKCE mismatch),
+        # a legit client losing a race against an attacker with a leaked
+        # code would see ``invalid_grant`` on their own exchange —
+        # effectively a DoS oracle. SELECT ... FOR UPDATE serialises
+        # concurrent redeem attempts so exactly one wins the subsequent
+        # DELETE; the loser gets a 0-row DELETE and raises below.
         row = await conn.fetchrow(
             """
-            DELETE FROM meta.oauth_auth_codes
+            SELECT client_id, granter_api_key_id, customer_id,
+                   code_challenge, code_challenge_method,
+                   redirect_uri, scope
+              FROM meta.oauth_auth_codes
              WHERE code = $1
                AND expires_at > now()
                AND used_at IS NULL
-            RETURNING client_id, granter_api_key_id, customer_id,
-                      code_challenge, code_challenge_method,
-                      redirect_uri, scope
+             FOR UPDATE
             """,
             code,
         )
         if row is None:
             raise ValueError("invalid_grant: code unknown, expired, or already used")
-        if row["client_id"] != client_id:
-            raise ValueError("invalid_grant: client_id mismatch")
-        if row["redirect_uri"] != redirect_uri:
-            raise ValueError("invalid_grant: redirect_uri mismatch")
+        # All post-lookup error descriptions collapse to a single opaque
+        # string so the client can't distinguish which bound parameter
+        # was wrong — closes the mismatch oracle.
+        if not hmac.compare_digest(row["client_id"], client_id):
+            raise ValueError("invalid_grant: authorization grant is invalid")
+        if not hmac.compare_digest(row["redirect_uri"], redirect_uri):
+            raise ValueError("invalid_grant: authorization grant is invalid")
         if not _pkce_verify(code_verifier, row["code_challenge"]):
-            raise ValueError("invalid_grant: PKCE verification failed")
+            raise ValueError("invalid_grant: authorization grant is invalid")
+
+        # All checks passed — burn the code now. This is inside the
+        # same transaction so concurrent redeems serialise on the row
+        # lock and only one proceeds.
+        deleted = await conn.execute(
+            "DELETE FROM meta.oauth_auth_codes WHERE code = $1",
+            code,
+        )
+        if not deleted.endswith(" 1"):
+            raise ValueError("invalid_grant: authorization grant is invalid")
 
         customer_id = row["customer_id"]
         # Look up the customer's email so mint_key can reuse the existing
@@ -372,6 +424,23 @@ async def exchange_code_for_token(
             raise ValueError("server_error: customer not found")
         email = email_row["email"]
 
+        # Per-customer cap on oauth-minted keys — a stolen granter key
+        # can't be spun into an arbitrary number of durable children.
+        active_count = await conn.fetchval(
+            """
+            SELECT count(*) FROM meta.api_keys
+             WHERE customer_id = $1
+               AND revoked_at IS NULL
+               AND label LIKE 'oauth:%'
+            """,
+            customer_id,
+        )
+        if active_count >= _MAX_OAUTH_KEYS_PER_CUSTOMER:
+            raise ValueError(
+                "invalid_grant: oauth key cap reached for this account "
+                "(revoke unused keys before reconnecting)"
+            )
+
     client = await get_client(client_id)
     label = f"oauth:{client.client_name}" if client and client.client_name else "oauth"
     raw_token, _meta = await mint_key(email=email, label=label)
@@ -382,12 +451,45 @@ async def exchange_code_for_token(
     return {
         "access_token": raw_token,
         "token_type": "Bearer",
-        # Access tokens are long-lived API keys; ``expires_in`` is
-        # informational only. Give a year — clients should rely on
-        # 401 responses (after revocation) rather than a TTL.
-        "expires_in": 31_536_000,
+        # No ``expires_in`` — access tokens are long-lived API keys
+        # whose lifecycle is managed by revocation, not a TTL. Per
+        # RFC 6749 §5.1 the field is optional; omitting it signals
+        # "not short-lived" and stops well-behaved clients from
+        # silently re-running the auth dance (and accumulating orphan
+        # oauth:* rows on meta.api_keys) after an arbitrary cutoff.
         "scope": row["scope"] or "mcp",
     }
+
+
+# ---------------------------------------------------------------------------
+# Token revocation (RFC 7009)
+# ---------------------------------------------------------------------------
+
+
+async def revoke_token(token: str) -> None:
+    """Revoke an access token. Idempotent per RFC 7009: we never signal
+    back whether the token was known — unknown tokens return silently.
+
+    Implementation note: we store access tokens as rows in
+    ``meta.api_keys``, so revocation is literally ``revoke_key`` on the
+    row matching the submitted token hash. Caller (HTTP handler) should
+    respond 200 with no body regardless of the lookup outcome."""
+    from geo_mcp.auth import hash_key, legacy_hash_key
+    if not token:
+        return
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        # Try canonical + legacy hashes so a pre-pepper token still
+        # revokes cleanly. No-op if neither matches (RFC 7009 §2.2).
+        await conn.execute(
+            """
+            UPDATE meta.api_keys
+               SET revoked_at = now()
+             WHERE key_hash = ANY($1::text[])
+               AND revoked_at IS NULL
+            """,
+            [hash_key(token), legacy_hash_key(token)],
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +506,7 @@ def authorize_page_html(
     from geo_mcp.server import _shell
 
     client_name = params.client.client_name or params.client.client_id[:12]
+    redirect_host = urlparse(params.redirect_uri).netloc or params.redirect_uri
     # Hidden form fields — we round-trip the authorization request params
     # through the form so the POST handler can re-validate and issue the
     # code without re-parsing the original query string.
@@ -427,12 +530,21 @@ def authorize_page_html(
 <div class="container-narrow">
   <div class="hero">
     <h1>Authorize {html.escape(client_name)}</h1>
+    <p class="sub" style="font-size:0.85em;background:#fff8e1;border:1px solid #f6c851;
+                          border-radius:6px;padding:0.6em 0.8em;margin:1em 0;">
+      <strong>Unverified client</strong> — geo-mcp does not vouch for the
+      identity of the application requesting access. Only proceed if you
+      recognise the redirect destination below.
+    </p>
     <p class="sub"><strong>{html.escape(client_name)}</strong> is requesting access to
     your geo-mcp account. Paste your API key to approve — a new key will
     be minted and issued to this client so you can revoke it independently
     at any time.</p>
-    <p class="sub" style="font-size:0.85em;opacity:0.7;">
-      Redirect back to: <code>{html.escape(params.redirect_uri)}</code>
+    <p class="sub" style="font-size:0.9em;">
+      Approval will redirect to: <code><strong>{html.escape(redirect_host)}</strong></code>
+      <br><span style="opacity:0.65;font-size:0.85em;">
+        (full URL: <code>{html.escape(params.redirect_uri)}</code>)
+      </span>
     </p>
     {err_html}
     <form method="POST" action="/oauth/authorize" style="margin-top:1.5em;">

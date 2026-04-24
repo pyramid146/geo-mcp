@@ -91,6 +91,18 @@ async def _sweep_test_rows() -> dict[str, int]:
     return deleted
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_state():
+    """The signup/oauth-register IP rate limit is process-global in-memory
+    state. Without this fixture, a long test run eventually trips 429s
+    because every test appears to come from the same client host. The
+    production runtime never sees this pattern (no single IP makes 5
+    signups / register calls per hour in practice)."""
+    from geo_mcp import server as server_mod
+    server_mod._rate_hits.clear()
+    yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _cleanup_test_meta_rows():
     yield

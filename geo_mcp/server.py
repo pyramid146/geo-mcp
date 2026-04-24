@@ -23,6 +23,7 @@ from geo_mcp.oauth import (
     oauth_authorization_server_metadata,
     oauth_protected_resource_metadata,
     register_client,
+    revoke_token,
     validate_authorize_request,
 )
 from geo_mcp.signup import start_signup, verify_signup
@@ -239,6 +240,19 @@ def build_app() -> FastMCP:
 
     @app.custom_route("/oauth/register", methods=["POST"])
     async def oauth_register(request: Request) -> JSONResponse:
+        # Per-IP rate limit. /oauth/register is unauthenticated by
+        # design (clients register BEFORE they have a token), and each
+        # call writes a row to meta.oauth_clients. Without this a single
+        # attacker can grow the table unboundedly. Uses the same sliding
+        # window helper as /signup — 20/hour is generous for legit use
+        # (every Claude Desktop / Cursor install does at most one DCR)
+        # and low enough to kill flood attacks fast.
+        if not _rate_limit_allow(request):
+            return JSONResponse(
+                {"error": "rate_limited",
+                 "error_description": "Too many registrations from this address."},
+                status_code=429,
+            )
         try:
             body = await request.json()
         except Exception:
@@ -261,6 +275,11 @@ def build_app() -> FastMCP:
             "token_endpoint_auth_method": "none",
         }, status_code=201)
 
+    # Cache-control for pages carrying security-sensitive state.
+    # The consent page echoes code_challenge + state into a form — we
+    # don't want a browser's back-button cache to replay stale challenges.
+    _NOSTORE = {"Cache-Control": "no-store", "Pragma": "no-cache"}
+
     @app.custom_route("/oauth/authorize", methods=["GET"])
     async def oauth_authorize_get(request: Request) -> HTMLResponse:
         q = request.query_params
@@ -276,11 +295,25 @@ def build_app() -> FastMCP:
         if params is None:
             # Don't redirect — the redirect_uri might be the thing that's
             # wrong. Show an error page to the browser.
-            return HTMLResponse(_page_error(f"OAuth error: {err}"), status_code=400)
-        return HTMLResponse(authorize_page_html(params))
+            return HTMLResponse(_page_error(f"OAuth error: {err}"), status_code=400,
+                                headers=_NOSTORE)
+        return HTMLResponse(authorize_page_html(params), headers=_NOSTORE)
 
     @app.custom_route("/oauth/authorize", methods=["POST"])
     async def oauth_authorize_post(request: Request) -> HTMLResponse:
+        # CSRF defence: the consent POST carries a user-pasted API key
+        # that must never be accepted cross-origin. Browsers attach
+        # Origin on every form POST; we require it to match our own
+        # canonical base. No Origin → block too (same-origin fetchers
+        # send it, the legitimate consent form always will).
+        from geo_mcp.oauth import public_base_url
+        origin = request.headers.get("origin") or request.headers.get("referer") or ""
+        if not origin.startswith(public_base_url()):
+            return HTMLResponse(
+                _page_error("Cross-origin POST blocked. "
+                            "Submit the consent form from geomcp.dev."),
+                status_code=403,
+            )
         form = await request.form()
         params, err = await validate_authorize_request(
             client_id=str(form.get("client_id") or "") or None,
@@ -311,6 +344,18 @@ def build_app() -> FastMCP:
         existing = u.query + ("&" if u.query else "") + urlencode(extra)
         redirect_to = urlunparse(u._replace(query=existing))
         return RedirectResponse(redirect_to, status_code=302)
+
+    @app.custom_route("/oauth/revoke", methods=["POST"])
+    async def oauth_revoke(request: Request) -> JSONResponse:
+        """RFC 7009 — revoke an access token. No auth (public clients),
+        idempotent, always returns 200 so attackers can't probe token
+        existence via response codes."""
+        form = await request.form()
+        await revoke_token(str(form.get("token") or "").strip())
+        return JSONResponse({}, status_code=200, headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        })
 
     @app.custom_route("/oauth/token", methods=["POST"])
     async def oauth_token(request: Request) -> JSONResponse:

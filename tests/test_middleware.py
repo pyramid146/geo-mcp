@@ -54,9 +54,12 @@ async def test_missing_authorization_header_returns_401():
     body = r.json()
     assert body["error"] == "unauthorized"
     assert "API key" in body["message"]
-    # No WWW-Authenticate header — we're API-key auth, not OAuth Bearer,
-    # and MCP scanners read ``WWW-Authenticate: Bearer`` as an OAuth hint.
-    assert "WWW-Authenticate" not in r.headers
+    # WWW-Authenticate per RFC 9728 / MCP authorization spec — points to
+    # our PRM discovery endpoint so MCP clients can auto-discover OAuth.
+    www = r.headers.get("WWW-Authenticate", "")
+    assert www.startswith("Bearer ")
+    assert "resource_metadata=" in www
+    assert "/.well-known/oauth-protected-resource" in www
 
 
 async def test_empty_authorization_header_returns_401():

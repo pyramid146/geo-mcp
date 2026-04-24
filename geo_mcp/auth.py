@@ -56,10 +56,11 @@ def hash_key(raw: str) -> str:
     return hashlib.sha256(raw_b).hexdigest()
 
 
-def _legacy_hash_key(raw: str) -> str:
+def legacy_hash_key(raw: str) -> str:
     """Plain SHA-256 — the hashing used before pepper support existed.
-    Kept as a fallback on ``validate_header`` so pre-pepper keys still
-    authenticate after the pepper is introduced."""
+    Kept as a fallback on ``validate_header`` + ``revoke_token`` so
+    pre-pepper keys still authenticate / revoke after the pepper is
+    introduced."""
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -117,7 +118,7 @@ async def lookup_raw_key(raw: str) -> AuthContext | None:
     the key a user pastes at the authorization endpoint."""
     candidates = [hash_key(raw)]
     if _KEY_PEPPER:
-        candidates.append(_legacy_hash_key(raw))
+        candidates.append(legacy_hash_key(raw))
 
     pool = await get_pool()
     async with pool.acquire() as conn:

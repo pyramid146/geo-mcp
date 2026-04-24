@@ -46,7 +46,7 @@ _PUBLIC_PATHS: frozenset[str] = frozenset({
     # they have a token; /token and /register are called by clients
     # that don't yet have one. The endpoints do their own auth (PKCE,
     # user-pasted API key) internally.
-    "/oauth/authorize", "/oauth/token", "/oauth/register",
+    "/oauth/authorize", "/oauth/token", "/oauth/register", "/oauth/revoke",
 })
 
 
@@ -78,16 +78,26 @@ class AuthMiddleware(BaseHTTPMiddleware):
         x_api_key = request.headers.get("x-api-key")
         ctx = await validate_header(authorization, x_api_key)
         if ctx is None:
-            # Deliberately NOT sending ``WWW-Authenticate: Bearer …`` —
-            # MCP hosting scanners (Smithery) and MCP-aware clients
-            # interpret a Bearer challenge as "this server requires OAuth
-            # 2.1 discovery" per the MCP authorization spec, then hunt
-            # for ``/.well-known/oauth-*`` endpoints that don't exist
-            # here. We're API-key auth only; the body message tells
-            # callers how to authenticate without advertising OAuth.
+            # Advertise the OAuth protected-resource metadata endpoint
+            # per RFC 9728 / the MCP authorization spec. Real MCP
+            # clients (Claude Desktop, Cursor) use this header to
+            # discover the server's authorization server and kick off
+            # the OAuth dance automatically. Direct API-key clients
+            # ignore the header and keep presenting Bearer/X-API-Key.
+            #
+            # Earlier we removed this header because Smithery interpreted
+            # it as "OAuth required" without finding the discovery
+            # endpoints — we now serve those endpoints, so the header
+            # works as intended and helps rather than hurts.
+            from geo_mcp.oauth import public_base_url
+            prm = f"{public_base_url()}/.well-known/oauth-protected-resource"
             return JSONResponse(
-                {"error": "unauthorized", "message": "Missing or invalid API key. Provide Authorization: Bearer <key> or X-API-Key: <key>."},
+                {"error": "unauthorized",
+                 "message": "Missing or invalid API key. Provide Authorization: Bearer <key> or X-API-Key: <key>, or authorize via OAuth."},
                 status_code=401,
+                headers={
+                    "WWW-Authenticate": f'Bearer resource_metadata="{prm}"',
+                },
             )
         token = current_auth.set(ctx)
         try:
