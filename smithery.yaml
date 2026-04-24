@@ -1,34 +1,45 @@
 # Smithery manifest for geo-mcp.
 #
-# This describes a REMOTE (hosted) MCP server — not something Smithery
-# runs on the user's behalf. Smithery's remote-server path:
+# This describes a REMOTE (hosted) MCP server. Smithery's remote-server path:
 #
 #   1. User picks geo-mcp from the Smithery catalogue.
 #   2. Smithery prompts them for an API key (from configSchema below).
-#   3. Smithery hands the URL + Bearer header to the user's MCP client.
+#   3. Smithery forwards the configured header on every request to our /mcp.
+#
+# IMPORTANT — schema gotcha: the older ``startCommand.type: http`` +
+# ``commandFunction`` form is STDIO-only in Smithery's zod schema
+# (see smithery-ai/migration-guide-mcp src/tools/yaml-validation.ts).
+# For remote servers the publish backend silently ignores commandFunction,
+# so user-supplied headers never reach the upstream and the publish flow
+# falls into OAuth-discovery mode. The working form is ``runtime: remote``
+# with a top-level ``headers`` templating block. Verified against working
+# remote listings on Smithery, e.g. @stockmarketscan/mcp-server.
 #
 # If Smithery's schema evolves, cross-check against
 # https://smithery.ai/docs/build/project-config/smithery-yaml before
-# resubmitting — the canonical fields here are startCommand + configSchema.
-startCommand:
-  type: http
-  configSchema:
-    type: object
-    required:
-      - apiKey
-    properties:
-      apiKey:
-        type: string
-        title: API key
-        description: >
-          Your geo-mcp API key. Free tier available at
-          https://geomcp.dev/signup — one email → one key, no card.
-        format: password
-  commandFunction: |-
-    (config) => ({
-      type: "http",
-      url: "https://geomcp.dev/mcp",
-      headers: {
-        "X-API-Key": config.apiKey
-      }
-    })
+# resubmitting.
+runtime: remote
+
+remote:
+  url: https://geomcp.dev/mcp
+  transport: streamable-http
+
+configSchema:
+  type: object
+  required:
+    - apiKey
+  properties:
+    apiKey:
+      type: string
+      title: API key
+      description: >
+        Your geo-mcp API key. Free tier available at
+        https://geomcp.dev/signup — one email → one key, no card.
+      format: password
+
+# Forward the user-supplied apiKey as the X-API-Key header on every
+# request. The server also accepts Authorization: Bearer <key>, but
+# X-API-Key lets Smithery pass the raw key verbatim with no scheme
+# prefix to construct.
+headers:
+  X-API-Key: "{{apiKey}}"
