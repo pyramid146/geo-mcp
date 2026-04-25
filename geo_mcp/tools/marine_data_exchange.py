@@ -41,9 +41,20 @@ _MDX_ENDPOINT = (
     "https://services2.arcgis.com/PZklK9Q45mfMFuZs/arcgis/rest/services/"
     "MDE_SeriesExtents_PublicPolygons/FeatureServer/0/query"
 )
+_MDX_SEARCH_ENDPOINT = (
+    "https://mde-prod-search-1.search.windows.net/indexes/series-v3/docs/search"
+    "?api-version=2023-11-01"
+)
+# Public read-only key — embedded in MDX's own JS bundle. NOT a secret;
+# Azure Search "query keys" exist precisely so they can be shipped to the
+# browser. Confirmed against the live frontend April 2026.
+_MDX_SEARCH_KEY = "BBAF1533DC9CC72AD8A325DF74047017"
+_MDX_DOWNLOAD_BASE = "https://www.marinedataexchange.co.uk"
+
 _DEFAULT_RADIUS_M = 5_000     # marine queries are wider than onshore by default
 _MAX_RADIUS_M = 50_000        # 50 km cap — bigger and the result set explodes
 _MAX_RECORDS_RETURNED = 50
+_MAX_COLLECTIONS_RETURNED = 100
 _HTTP_TIMEOUT_S = 8.0
 _USER_AGENT = "geomcp.dev/1.0 (+https://geomcp.dev)"
 
@@ -251,3 +262,261 @@ def _int_or_none(v: Any) -> int | None:
         return int(v)
     except (TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Drill-down: collections within a series (the actual file deliverables)
+# ---------------------------------------------------------------------------
+
+
+# Heuristic classification for an MDX collection — based on its name +
+# description + keywords + type. Aimed at telling a GIS user, at a glance,
+# whether the bundle contains shapefile/GeoTIFF-class outputs they can
+# drop into QGIS/ArcGIS, or whether it's specialist-software-only data
+# (Kingdom seismic projects, raw SEG-D, etc.) or just a PDF report.
+_GIS_HINT_TERMS = (
+    "shapefile", "shp", "geotiff", "geotiffs", "geo-tiff", " tif ", ".tif",
+    "raster", "vector", "geopackage", ".gpkg", "geodatabase", ".gdb",
+    "kml", "kmz", "geojson", "dtm", "digital terrain model",
+    "digital elevation model", "dem", "polygon", "linestring",
+    "trackplot", "track lines", "ascii grid", "esri grid",
+    "feature class", "ground model",
+)
+_SPECIALIST_HINT_TERMS = (
+    # IHS Kingdom seismic interpretation suite — match the product
+    # phrase, not the bare word ("Kingdom" alone false-positives on
+    # "United Kingdom" in basically every UK survey description).
+    "kingdom project", "kingdom workspace", "kingdom database",
+    "ihs kingdom", "petrel project", "promax", "claritas",
+    "globe claritas",
+    # Raw seismic / sonar / nav formats — vendor or instrument-bound.
+    "raw seg", "seg-y", "segy", "seg-d", "vibrocore log",
+    "raw bathymetry", "raw multibeam", "raw mbes",
+    "raw side-scan", "raw sss", "raw shape",
+    "navigation files", "gpr raw",
+)
+_REPORT_TYPES = {"report", "reports", "documents"}
+
+
+def _classify_collection(c: dict[str, Any]) -> str:
+    """Returns one of: ``gis_ready``, ``specialist``, ``report``, ``unknown``.
+
+    Pure heuristic over the collection's name + description + keywords
+    + type — MDX doesn't expose file-format manifests at the catalogue
+    level, so this is the best we can do without unzipping the actual
+    deliverable. Errs toward ``unknown`` rather than mis-flagging.
+    """
+    type_str = (c.get("type") or "").strip().lower()
+    if type_str in _REPORT_TYPES:
+        return "report"
+
+    haystack = " ".join(
+        str(x).lower() for x in (
+            c.get("name") or "",
+            c.get("description") or "",
+            *(c.get("keywords") or []),
+        )
+    )
+    has_gis = any(t in haystack for t in _GIS_HINT_TERMS)
+    has_specialist = any(t in haystack for t in _SPECIALIST_HINT_TERMS)
+    # If both signals fire, prefer GIS — if a bundle includes shapefiles
+    # AND raw SEGY, it's still useful to a GIS user (they grab the SHPs).
+    if has_gis:
+        return "gis_ready"
+    if has_specialist:
+        return "specialist"
+    # Bathymetry / Elevation keyword without other markers — almost
+    # always means there's a DTM raster in the bundle. Strong default.
+    keywords_lc = [str(k).lower() for k in (c.get("keywords") or [])]
+    if any("bathymetry" in k or "elevation" in k for k in keywords_lc):
+        return "gis_ready"
+    return "unknown"
+
+
+async def marine_survey_files_uk(
+    series_id: str,
+    gis_only: bool = False,
+) -> dict[str, Any]:
+    """List the file collections within a single MDX survey series.
+
+    Each MDX series — returned by ``marine_surveys_uk`` — bundles
+    multiple **collections**, each of which is a downloadable ZIP
+    archive of related deliverables (DTM rasters, shapefile boundaries,
+    SEGY seismic, navigation CSVs, vendor reports, etc.). This tool
+    returns the per-collection metadata so a GIS user can pick which
+    bundles to download.
+
+    Each collection is classified by a heuristic into:
+
+    * ``gis_ready`` — likely contains shapefile / GeoTIFF / GeoPackage /
+      KML / DTM raster outputs that drop straight into QGIS / ArcGIS.
+    * ``specialist`` — vendor-specific formats (IHS Kingdom seismic
+      projects, raw SEG-Y, raw multibeam pings) usable only with
+      domain software.
+    * ``report`` — PDFs / documents, not data.
+    * ``unknown`` — heuristic couldn't decide; check the description.
+
+    The classification is best-effort — MDX doesn't expose a file
+    manifest at the catalogue level, so the heuristic reads the
+    collection name + description + keywords. If you set
+    ``gis_only=True`` you'll only get ``gis_ready`` rows.
+
+    Files are large — multibeam / sub-bottom collections regularly
+    exceed 50 GB. The ``download_url`` is a direct link to the ZIP at
+    Crown Estate's public CDN, no login required, but agents must
+    NEVER fetch the ZIP into context. Surface the URL to the user;
+    they download out-of-band.
+
+    Arguments:
+        series_id: MDX series identifier, as returned by
+            ``marine_surveys_uk(...).series[i].series_id``.
+        gis_only: if True, exclude ``specialist`` / ``report`` /
+            ``unknown`` collections from the result list. Default False.
+
+    Returns:
+        {
+          "series_id": str,
+          "series_name": str,
+          "site": str,
+          "n_collections": int,                     # total in series
+          "by_class": {"gis_ready", "specialist",
+                       "report", "unknown": int},   # bucket counts
+          "total_size_bytes": int,
+          "collections": [
+              {"id", "name", "description",
+               "type", "classification",
+               "keywords", "size_bytes",
+               "start_date", "end_date",
+               "download_url"},
+              ...                                    # capped at 100
+          ],
+          "metadata_url": str | null,                # MEDIN ISO19139 XML
+          "source": "Marine Data Exchange — series collections",
+          "attribution": "..."
+        }
+
+    On unknown ``series_id`` returns ``{"error": "not_found", ...}``.
+    On upstream failure returns ``{"error": "upstream_unavailable", ...}``.
+    """
+    # Accept either string or int (ArcGIS returns numeric Series_ID;
+    # the agent or caller may pass it through as either form).
+    if series_id is None or (isinstance(series_id, str) and not series_id.strip()):
+        return {"error": "invalid_series_id",
+                "message": "series_id must be a non-empty string or integer"}
+    sid = str(series_id).strip()
+
+    # ArcGIS returns Series_ID as a plain numeric (e.g. "651"); Cog
+    # Search keys are tenant-prefixed (e.g. "TCE-651"). Build a list of
+    # candidate id forms to try in a single OR-filter.
+    candidates: list[str] = [sid]
+    if sid.isdigit():
+        candidates.append(f"TCE-{sid}")
+    elif "-" not in sid:
+        # Defensive: bare alphanumeric — try TCE prefix too.
+        candidates.append(f"TCE-{sid}")
+    filter_clause = " or ".join(f"id eq '{c}'" for c in candidates)
+
+    body = {
+        "search": "*",
+        "filter": filter_clause,
+        "queryType": "simple",
+        "top": 1,
+        "select": (
+            "id,name,site,collections,medin,description,company,"
+            "publicDate,boundingBox"
+        ),
+    }
+    try:
+        async with httpx.AsyncClient(
+            timeout=_HTTP_TIMEOUT_S,
+            headers={"User-Agent": _USER_AGENT},
+        ) as client:
+            resp = await client.post(
+                _MDX_SEARCH_ENDPOINT,
+                headers={"api-key": _MDX_SEARCH_KEY,
+                         "Content-Type": "application/json"},
+                json=body,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPError as exc:
+        log.warning("MDX collection lookup failed: %s", exc)
+        return {
+            "error": "upstream_unavailable",
+            "message": f"Marine Data Exchange could not be reached: {exc}",
+            "series_id": sid,
+        }
+
+    docs = data.get("value") or []
+    if not docs:
+        return {
+            "error": "not_found",
+            "message": f"No MDX series with id={sid!r}",
+            "series_id": sid,
+        }
+    doc = docs[0]
+    collections = doc.get("collections") or []
+
+    rows: list[dict[str, Any]] = []
+    by_class: dict[str, int] = {"gis_ready": 0, "specialist": 0,
+                                 "report": 0, "unknown": 0}
+    total_size = 0
+    for c in collections:
+        cls = _classify_collection(c)
+        by_class[cls] = by_class.get(cls, 0) + 1
+        size = c.get("fileSize") or 0
+        try:
+            size = int(size)
+        except (TypeError, ValueError):
+            size = 0
+        total_size += size
+        download_path = c.get("downloadFilesUrl") or ""
+        download_url = (
+            f"{_MDX_DOWNLOAD_BASE}{download_path}"
+            if download_path.startswith("/") else download_path
+        )
+        rows.append({
+            "id": c.get("id"),
+            "name": c.get("name"),
+            "description": c.get("description"),
+            "type": c.get("type"),
+            "classification": cls,
+            "keywords": c.get("keywords") or [],
+            "size_bytes": size,
+            "start_date": _iso_or_none(c.get("startDate")),
+            "end_date": _iso_or_none(c.get("endDate")),
+            "download_url": download_url or None,
+        })
+
+    if gis_only:
+        rows = [r for r in rows if r["classification"] == "gis_ready"]
+
+    rows.sort(key=lambda r: r.get("end_date") or "", reverse=True)
+
+    medin = doc.get("medin") or {}
+    medin_path = medin.get("downloadUrl")
+    metadata_url = (
+        f"{_MDX_DOWNLOAD_BASE}{medin_path}"
+        if isinstance(medin_path, str) and medin_path.startswith("/")
+        else medin_path
+    )
+
+    return {
+        "series_id": doc.get("id"),
+        "series_name": doc.get("name"),
+        "site": (doc.get("site") or {}).get("name"),
+        "n_collections": len(collections),
+        "by_class": by_class,
+        "total_size_bytes": total_size,
+        "collections": rows[:_MAX_COLLECTIONS_RETURNED],
+        "metadata_url": metadata_url,
+        "source": "Marine Data Exchange — series collections",
+        "attribution": _ATTRIBUTION,
+    }
+
+
+def _iso_or_none(v: Any) -> str | None:
+    """Cog Search dates come as ISO-8601 strings already. Trim to date."""
+    if not v or not isinstance(v, str):
+        return None
+    return v[:10]
