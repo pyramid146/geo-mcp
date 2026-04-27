@@ -55,6 +55,14 @@ from geo_mcp.tools.forward_geocoding import geocode_uk
 from geo_mcp.tools.geocoding import reverse_geocode_uk
 from geo_mcp.tools.geology import geology_uk
 from geo_mcp.tools.heritage import heritage_nearby_uk, is_listed_building_uk
+from geo_mcp.tools.marine_admiralty import marine_admiralty_uk
+from geo_mcp.tools.marine_bathymetry import marine_bathymetry_uk
+from geo_mcp.tools.marine_data_exchange import (
+    marine_survey_files_uk,
+    marine_surveys_uk,
+)
+from geo_mcp.tools.marine_geology import marine_geology_uk
+from geo_mcp.tools.marine_nsta import marine_nsta_uk
 from geo_mcp.tools.price_paid import recent_sales_uk
 from geo_mcp.tools.property import property_lookup_uk, property_report_uk
 from geo_mcp.tools.transforms import transform_coords
@@ -62,13 +70,8 @@ from geo_mcp.tools.transforms import transform_coords
 log = logging.getLogger(__name__)
 
 
-def build_app() -> FastMCP:
-    app = FastMCP(name="geo-mcp")
-    # Order matters: UsageLogging first (becomes the outer wrap), RateLimit
-    # after (inner). Rate-limit rejections propagate out through UsageLogging
-    # so they still land in meta.usage_log with error_code='rate_limited'.
-    app.add_middleware(UsageLoggingMiddleware())
-    app.add_middleware(RateLimitMiddleware())
+def _register_onshore_tools(app: FastMCP) -> None:
+    """Register the 33 onshore tools + 2 onshore prompts on ``app``."""
     app.tool(transform_coords)
     app.tool(distance_between)
     app.tool(geocode_uk)
@@ -102,15 +105,6 @@ def build_app() -> FastMCP:
     app.tool(road_nearby_uk)
     app.tool(gp_practices_nearby_uk)
     app.tool(title_polygon_uk)
-
-    # -----------------------------------------------------------------
-    # Prompts — reusable templates that chain tools into a coherent
-    # workflow. Agents that don't naturally plan multi-tool sequences
-    # can call one of these to get the exact tool order + synthesis
-    # instructions for a common use-case (site brief, flood workup,
-    # property due-diligence). Also satisfies the "capability breadth"
-    # dimension of catalogue quality scores.
-    # -----------------------------------------------------------------
 
     @app.prompt(
         name="uk_site_brief",
@@ -187,12 +181,77 @@ Return a brief with:
 Quote the `attribution` strings from each tool response in the final output (OGLv3).
 """
 
+
+def _register_marine_tools(app: FastMCP) -> None:
+    """Register the marine / offshore tools + the offshore prompt on
+    ``app``. Marine tools are *discovery-shaped* (return links to
+    upstream data portals) rather than *decision-shaped* like the
+    onshore set — they live on a separate FastMCP because the value
+    proposition and audience differ enough that they are essentially a
+    second product. See README and ``/marine`` landing for the framing.
+    """
+    app.tool(marine_bathymetry_uk)
+    app.tool(marine_admiralty_uk)
+    app.tool(marine_surveys_uk)
+    app.tool(marine_survey_files_uk)
+    app.tool(marine_geology_uk)
+    app.tool(marine_nsta_uk)
+
+    @app.prompt(
+        name="uk_offshore_brief",
+        description=(
+            "Discovery brief for a UK marine point — what bathymetric, "
+            "geophysical, geotechnical, ecological, and licensing data "
+            "exists, with download URLs where available. Aimed at "
+            "consenting consultants, EIA writers, and offshore-wind / "
+            "cable-route screening workflows."
+        ),
+    )
+    def uk_offshore_brief(lat: float, lon: float, radius_m: int = 10000) -> str:
+        return f"""Produce a UK offshore data discovery brief for ({lat}°N, {lon}°E), {radius_m / 1000:g} km radius.
+
+Call these tools in parallel (they don't depend on each other):
+
+1. `marine_bathymetry_uk` — depth at the point + the UKHO/EU surveys that contributed to the EMODnet DTM
+2. `marine_admiralty_uk` — UKHO ADMIRALTY bathymetric surveys with download URLs
+3. `marine_surveys_uk` — Crown Estate Marine Data Exchange (offshore-wind era surveys)
+   - For each substantial series, follow up with `marine_survey_files_uk(series_id, gis_only=True)` to surface GIS-ready ZIPs
+4. `marine_geology_uk` — BGS GeoIndex Offshore: samples, sediment, seismic lines, hydrocarbon wells
+5. `marine_nsta_uk` — NSTA Open Data: petroleum licences, fields, seismic surveys, pipelines, CO2 storage
+
+Then synthesise:
+
+- **Headline**: depth, seabed substrate inferred from sediment + bathymetry
+- **Existing assets**: petroleum / CO2 licences, fields, pipelines, MPAs in the area
+- **Available data inventory**: counts per source, with the most useful download URLs surfaced verbatim
+- **Constraints**: any obvious pre-construction red flags (existing CCUS lease, dense legacy seismic implying complex stratigraphy, plugged-and-abandoned wells nearby)
+- **Coverage gaps**: any source that returned an upstream error or empty result — flag it explicitly
+
+Quote each tool's `attribution` verbatim at the bottom — the open licences (EMODnet CC-BY, OGLv3, Crown Estate Open Data, NSTA Open User Licence) require it.
+
+Don't speculate beyond what the tools returned. If the user wants raw SEG-Y or full well logs, point them at ndr.nstauthority.co.uk (gated, NDR account required).
+"""
+
+
+def _register_common_routes(app: FastMCP) -> None:
+    """Register all shared HTTP routes on ``app`` — landing pages, signup,
+    OAuth, health, status, favicons. These attach to the onshore FastMCP
+    (the parent of the URL hierarchy); the marine sub-mount only carries
+    its ``/mcp`` endpoint."""
+
     @app.custom_route("/", methods=["GET"])
     async def root(_: Request) -> HTMLResponse:
         # Live tool count keeps marketing copy in sync with what's
         # actually registered — no more "page says 28, app has 33".
         n = len(await app.list_tools())
         return HTMLResponse(_page_root(n))
+
+    @app.custom_route("/marine", methods=["GET"])
+    async def marine_landing(_: Request) -> HTMLResponse:
+        # Tool count for the marine sub-app is fixed (we know what
+        # _register_marine_tools registers); avoid building a second
+        # FastMCP just to list it.
+        return HTMLResponse(_page_marine_root(tool_count=6))
 
     @app.custom_route("/favicon.svg", methods=["GET"])
     async def favicon(_: Request) -> HTMLResponse:
@@ -484,7 +543,44 @@ Quote the `attribution` strings from each tool response in the final output (OGL
             "Pragma": "no-cache",
         })
 
+
+# ---------------------------------------------------------------------------
+# App builders: onshore (default) + marine (sub-mount)
+# ---------------------------------------------------------------------------
+
+
+def build_onshore_app() -> FastMCP:
+    """The original geo-mcp surface — 33 onshore tools, 2 prompts, plus
+    every shared HTTP route (landing, signup, OAuth, privacy, health).
+    Mounted at the URL root by ``main()``; ``/mcp`` is the MCP endpoint."""
+    app = FastMCP(name="geo-mcp")
+    # Order matters: UsageLogging first (becomes the outer wrap), RateLimit
+    # after (inner). Rate-limit rejections propagate out through UsageLogging
+    # so they still land in meta.usage_log with error_code='rate_limited'.
+    app.add_middleware(UsageLoggingMiddleware())
+    app.add_middleware(RateLimitMiddleware())
+    _register_onshore_tools(app)
+    _register_common_routes(app)
     return app
+
+
+def build_marine_app() -> FastMCP:
+    """Marine / offshore product surface — discovery-shaped tools that
+    surface metadata + download URLs from external portals (MDX, ADMIRALTY,
+    BGS Offshore, NSTA Open Data, EMODnet). Mounted at ``/marine`` by
+    ``main()``; the MCP endpoint is therefore at ``/marine/mcp``. No
+    custom HTTP routes — the parent (onshore) Starlette serves the
+    ``/marine`` landing page directly."""
+    app = FastMCP(name="geo-mcp-marine")
+    app.add_middleware(UsageLoggingMiddleware())
+    app.add_middleware(RateLimitMiddleware())
+    _register_marine_tools(app)
+    return app
+
+
+# Backwards-compat alias for tests / tooling that still import build_app.
+# New code should call build_onshore_app() or build_marine_app() directly.
+build_app = build_onshore_app
 
 
 # ---------------------------------------------------------------------------
@@ -1033,6 +1129,107 @@ def _page_root(tool_count: int) -> str:
 """)
 
 
+def _page_marine_root(tool_count: int) -> str:
+    """Marine landing page — separate product positioning. Same brand
+    shell, different prompt cards aimed at offshore professionals
+    (consenting consultants, EIA writers, offshore-wind devs).
+
+    Tool count is fixed because the marine FastMCP isn't introspected
+    here; it's the count from ``_register_marine_tools``. Bump if that
+    list changes."""
+    return _shell("geo-mcp marine — UK offshore data discovery", """
+<div class="container">
+  <section class="hero">
+    <div class="hero-bg">""" + _MARK_SVG + """</div>
+    <h1>UK offshore data, surfaced for LLM agents.</h1>
+    <p class="sub">""" + str(tool_count) + """ tools that aggregate the open subsets of
+      <strong>EMODnet</strong>, <strong>UKHO ADMIRALTY</strong>,
+      <strong>Crown Estate Marine Data Exchange</strong>,
+      <strong>BGS GeoIndex Offshore</strong> and the
+      <strong>NSTA</strong> public catalogue into single point or
+      polygon queries. Returns metadata + direct download URLs — not
+      data — so an agent can tell a consenting consultant which
+      surveys, samples, seismic lines, wells, licences, and CO2 storage
+      assets exist at a UK marine point, with public open-licence
+      attribution.</p>
+    <div class="hero-ctas">
+      <a class="btn" href="/signup">Get a free API key</a>
+      <a class="btn btn-ghost" href="/">Onshore product</a>
+    </div>
+    <p class="sub" style="font-size:0.9em;margin-top:1em;">
+      MCP endpoint: <code>https://geomcp.dev/marine/mcp</code> &middot;
+      same key works on both the onshore and marine endpoints.
+    </p>
+  </section>
+
+  <h2>What an offshore agent can ask</h2>
+  <p class="section-lead">For consenting screens, EIA literature
+  reviews, cable-route engineering, decommissioning baselines, and
+  CCUS site assessment — the kind of desk-based discovery that's
+  traditionally cost £5–250k per project.</p>
+
+  <div class="prompt-grid">
+    <div class="prompt-card" style="--domain: var(--c-flood);">
+      <h3>Bathymetry</h3>
+      <ul>
+        <li>What's the seabed depth at this point, and which UKHO/EU surveys went into the value?</li>
+        <li>Is this site shallow enough for a fixed-bottom turbine?</li>
+        <li>Which contributing survey is most recent — 2022 release vs 2024?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-property);">
+      <h3>UKHO ADMIRALTY archive</h3>
+      <ul>
+        <li>What ADMIRALTY bathymetric surveys cover Dogger Bank Project A?</li>
+        <li>Show me modern multibeam (1–2 m grid) within 50 km of this point.</li>
+        <li>Hand me the seabed.admiralty.co.uk download URL for HI1716.</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-heritage);">
+      <h3>Crown Estate developer surveys</h3>
+      <ul>
+        <li>Which offshore-wind survey series intersect this polygon?</li>
+        <li>Drill into Hornsea Project One UXO Survey — show only GIS-ready ZIPs.</li>
+        <li>Are there ornithology or benthic surveys deposited in the last five years?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-ground);">
+      <h3>BGS public scientific record</h3>
+      <ul>
+        <li>What sediment samples + Folk classification are within 5 km?</li>
+        <li>Any 2D seismic lines with a downloadable scan PDF here?</li>
+        <li>Which legacy hydrocarbon wells are nearby, and what's their status?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-geocoding);">
+      <h3>NSTA petroleum + CO2 storage</h3>
+      <ul>
+        <li>What petroleum licences and hydrocarbon fields cover this point?</li>
+        <li>Are there 3D seismic surveys here, and from which campaign?</li>
+        <li>Any CCUS storage licences nearby — and who's the operator?</li>
+      </ul>
+    </div>
+    <div class="prompt-card" style="--domain: var(--c-geocoding);">
+      <h3>One-shot offshore brief</h3>
+      <ul>
+        <li>The <code>uk_offshore_brief</code> prompt chains all five sources for a point or polygon.</li>
+        <li>Returns headline depth + assets + data inventory + coverage gaps in one synthesis.</li>
+        <li>Designed for the deliverable a consenting consultant produces today by hand.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 style="margin-top:3em;">What's not included</h2>
+  <p>Commercial products stay paywalled — UKHO ADMIRALTY chart packs
+  (AVCS, raw ENCs, AIS Density), and the NDR raw SEG-Y / well-log
+  archives at <a href="https://ndr.nstauthority.co.uk/">ndr.nstauthority.co.uk</a>
+  (Microsoft Azure AD + organisation-affiliated NDR account required).
+  This service surfaces metadata + portal URLs so a user with
+  appropriate access can fetch the files themselves.</p>
+</div>
+""")
+
+
 _PAGE_SIGNUP_FORM = _shell("Get an API key — geo-mcp", """
 <div class="container-narrow">
   <section class="hero">
@@ -1262,19 +1459,57 @@ def _rate_limit_allow(request: Request) -> bool:
 
 
 def main() -> None:
+    """Boot two FastMCP servers sharing one process + one Cloudflare tunnel:
+
+    - ``geomcp.dev/mcp``        — onshore product (33 tools, 2 prompts)
+    - ``geomcp.dev/marine/mcp`` — marine product (6 tools, 1 prompt)
+
+    Both share the same auth, OAuth flow, signup pages, /privacy, /health,
+    /status, and brand assets — those are served by the onshore app's
+    custom routes at the URL root. The marine app is sub-mounted as a
+    pure MCP endpoint with no HTTP routes of its own.
+    """
+    from contextlib import AsyncExitStack, asynccontextmanager
+
+    import uvicorn
+    from starlette.applications import Starlette
+    from starlette.routing import Mount
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     settings = load_settings()
-    log.info("geo-mcp starting on http://%s:%d/mcp", settings.http_host, settings.http_port)
-    app = build_app()
-    # CORS first (handles OPTIONS preflight before auth runs). Browsers
-    # are the only clients that preflight, and the MCP protocol has no
-    # cookie-or-credentials notion to protect, so allowing any origin is
-    # safe: auth is still enforced per-request via X-API-Key / Bearer.
-    # This matters for MCP hosting UIs (Smithery, Claude.ai playgrounds,
-    # etc.) that scan a server via the user's browser.
+    log.info(
+        "geo-mcp starting on http://%s:%d  (onshore /mcp + marine /marine/mcp)",
+        settings.http_host, settings.http_port,
+    )
+
+    onshore = build_onshore_app()
+    marine = build_marine_app()
+
+    # Same AuthMiddleware on both endpoints — keys + OAuth tokens are
+    # shared across products so a customer authenticating once works on
+    # both /mcp and /marine/mcp.
+    auth_mw = [ASGIMiddleware(AuthMiddleware)]
+    onshore_asgi = onshore.http_app(path="/mcp", middleware=auth_mw)
+    marine_asgi = marine.http_app(path="/mcp", middleware=auth_mw)
+
+    # Both FastMCPs need their StreamableHTTPSessionManager task group
+    # started at app boot and shut down at exit. Per FastMCP's ASGI
+    # integration docs, the parent app must invoke each child's
+    # ``.lifespan`` attribute (the lifespan function originally passed
+    # to its Starlette constructor). Chain both via AsyncExitStack so
+    # if one fails to start the other still gets a clean teardown.
+    @asynccontextmanager
+    async def combined_lifespan(parent_app):
+        async with AsyncExitStack() as stack:
+            await stack.enter_async_context(onshore_asgi.lifespan(parent_app))
+            await stack.enter_async_context(marine_asgi.lifespan(parent_app))
+            yield
+
+    # CORS at the parent level so OPTIONS preflight is answered before
+    # any sub-mount routing decisions. Same allow-list as before.
     cors = ASGIMiddleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -1286,11 +1521,23 @@ def main() -> None:
         expose_headers=["mcp-session-id", "mcp-protocol-version"],
         max_age=86400,
     )
-    app.run(
-        transport="http",
+
+    # Mount order matters: marine first (more specific path) so /marine/*
+    # doesn't fall through to the onshore catch-all at /.
+    parent = Starlette(
+        routes=[
+            Mount("/marine", app=marine_asgi),
+            Mount("/", app=onshore_asgi),
+        ],
+        middleware=[cors],
+        lifespan=combined_lifespan,
+    )
+
+    uvicorn.run(
+        parent,
         host=settings.http_host,
         port=settings.http_port,
-        middleware=[cors, ASGIMiddleware(AuthMiddleware)],
+        log_level="info",
     )
 
 
