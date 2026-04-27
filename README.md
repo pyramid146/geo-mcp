@@ -1,10 +1,20 @@
 # geo-mcp
 
-A **UK geospatial MCP server** for LLM agents. 33 tools covering flood risk, property records, heritage, environmental designations, greenspace, schools, healthcare, deprivation, rivers, roads, geology, crime, coal mining, elevation, and geocoding — built on UK open-data sources, returning decisions an LLM can act on rather than raw polygons.
+A **UK geospatial MCP server** for LLM agents. Two products on one server, sharing one API key:
+
+| | Onshore (`/mcp`) | Marine (`/marine/mcp`) |
+|---|---|---|
+| **Pitch** | "Get the answer" — synthesised verdicts | "Find the data" — discovery + download URLs |
+| **Tools** | 33 covering flood, property, heritage, schools, crime, geology, elevation, geocoding | 6 covering bathymetry, ADMIRALTY surveys, Crown Estate MDX, BGS Offshore, NSTA petroleum/CO2 |
+| **Audience** | Residential / planning / environmental / proptech | Offshore-wind, consenting consultants, EIA, CCUS, marine ecology |
+| **Data shape** | Hosted in PostGIS, decision-shaped responses | Metadata + portal URLs to upstream open-data archives |
 
 Without this, an agent answering a UK location question falls back to whatever happens to be in its training data — often stale, often hallucinated. With it, the agent gets current, authoritative, attributable data.
 
-🌐 **Hosted at [geomcp.dev](https://geomcp.dev)** — get a free API key at <https://geomcp.dev/signup> and point your MCP client at `https://geomcp.dev/mcp`. Running your own instance is also supported; see [DEVELOPMENT.md](./DEVELOPMENT.md).
+🌐 **Hosted at [geomcp.dev](https://geomcp.dev)** — get a free API key at <https://geomcp.dev/signup>. The same key works on both endpoints. Running your own instance is also supported; see [DEVELOPMENT.md](./DEVELOPMENT.md).
+
+- Onshore landing: <https://geomcp.dev/>
+- Marine landing: <https://geomcp.dev/marine>
 
 ---
 
@@ -56,11 +66,60 @@ Every response carries its data source and licence attribution, so an agent surf
 
 ---
 
+## Marine — UK offshore data discovery
+
+A separate product surface at **`https://geomcp.dev/marine/mcp`**, aimed at offshore-wind developers, consenting consultants, EIA writers, cable-route engineers, and CCUS site assessors. Where the onshore product synthesises a verdict, the marine product surfaces *what data exists* at a UK marine point with direct download URLs into the relevant open-data archive — the deliverable a desk-based offshore screening produces today.
+
+### What an offshore agent can ask
+
+**Bathymetry** — depth + contributing surveys (EMODnet aggregating UKHO + EU)
+- "What's the seabed depth at 53.89°N, 1.88°E, and which surveys went into that value?"
+- "Is this Dogger Bank coordinate within an MPA?"
+- "How recent is the contributing data — 2022 release vs 2024?"
+
+**UKHO ADMIRALTY archive** — survey footprints + download URLs
+- "Which ADMIRALTY bathymetric surveys cover this point?"
+- "Show me modern multibeam (1–2 m grid) surveys within 50 km."
+- "Hand me the seabed.admiralty.co.uk download URL for HI1716."
+
+**Crown Estate Marine Data Exchange** — offshore-wind era surveys
+- "Which developer surveys (Hornsea, Dogger Bank, Triton Knoll, …) intersect this polygon?"
+- "Drill into the Hornsea Project One UXO Survey — show only GIS-ready ZIPs (shapefile, GeoTIFF, trackplots)."
+- "Which collections are large multibeam DTM bundles vs IHS Kingdom seismic projects?"
+
+**BGS GeoIndex Offshore** — public scientific record
+- "What sediment samples + Folk classification are within 5 km?"
+- "Any 2D seismic lines with downloadable scan PDFs here?"
+- "Which legacy hydrocarbon wells are within 15 km, and what's their plug-and-abandonment status?"
+
+**NSTA petroleum + CO2 storage** — current commercial picture
+- "What petroleum licences and hydrocarbon fields cover this point?"
+- "Are there 3D seismic surveys here, and from which campaign?"
+- "Any CCUS storage licences nearby — and who's the operator?" (Endurance / Hewett / Acorn)
+
+**One-shot brief** — `uk_offshore_brief(lat, lon, radius_m)` chains all five sources and synthesises depth + assets + data inventory + coverage gaps in one go.
+
+### Marine tools
+
+- `marine_bathymetry_uk` — EMODnet WMS+WFS, returns depth + contributing CDI surveys with SeaDataNet metadata URLs
+- `marine_admiralty_uk` — UKHO SeaBed Mapping Service catalogue (~7,000 surveys, polygon footprints)
+- `marine_surveys_uk` + `marine_survey_files_uk` — Crown Estate MDX (series + drill-down with GIS-readiness classifier)
+- `marine_geology_uk` — BGS GeoIndex Offshore (samples, sediment, seismic lines, hydrocarbon wells)
+- `marine_nsta_uk` — NSTA Open Data (fields, licences, 2D/3D seismic, pipelines, CO2 storage)
+
+### What's not included
+
+Commercial paid products stay paywalled — UKHO ADMIRALTY chart packs (AVCS, raw ENCs, AIS Density), and the **NDR raw data archive** at <https://ndr.nstauthority.co.uk/> (raw SEG-Y, full well logs, mud logs, formation tops). Those require a Microsoft Azure AD login + organisation-affiliated NDR account. The marine tools surface metadata + portal URLs so a user with appropriate access can pull the files directly; we don't proxy gated content.
+
+Licences across the marine sources: EMODnet **CC-BY 4.0**; BGS **OGLv3**; NSTA **Open User Licence**; Crown Estate Marine Data Exchange **Open Data Licence**; UKHO ADMIRALTY catalogue **Crown copyright** (catalogue metadata is free, files require free SeaBed account). Per-response `attribution` strings carry the canonical credit text for each — preserve them in any agent output.
+
+---
+
 ## Get started
 
 1. Visit **`https://geomcp.dev/signup`** and enter your email.
 2. Click the confirmation link — your API key is displayed once. Save it somewhere safe.
-3. Paste it into your MCP client's config (pick whichever matches your setup):
+3. Paste it into your MCP client's config (pick whichever matches your setup). The examples below all point at the onshore endpoint `https://geomcp.dev/mcp`. **For the marine product, swap the URL to `https://geomcp.dev/marine/mcp`** — the same key authenticates against either, and you can connect to both simultaneously if you want one agent that handles UK land + sea questions.
 
 ### Claude Desktop
 
